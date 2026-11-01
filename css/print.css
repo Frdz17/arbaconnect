@@ -1,0 +1,82 @@
+/* ArbaConnect ERP - Print Stylesheet */
+
+@media print {
+  /* Hide non-printable app shell elements */
+  .app-header,
+  .app-sidebar,
+  .app-footer,
+  .sidebar-backdrop,
+  .toast-popup,
+  .no-print,
+  button:not(.allow-print) {
+    display: none !important;
+  }
+
+  /* Reset layout constraints for paper */
+  html, body {
+    zoom: 1 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-content-wrapper {
+    padding-left: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  .main-view-container {
+    padding: 0 !important;
+  }
+
+  /* When modal is open during print, display only modal content */
+  .modal-overlay {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .modal-dialog {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .modal-header,
+  .modal-footer {
+    display: none !important;
+  }
+
+  .modal-body {
+    padding: 0 !important;
+  }
+
+  /* Table borders in print */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid #999999 !important;
+    padding: 4px 8px !important;
+    color: #000000 !important;
+  }
+
+  /* Thermal Receipt Specific Print Styling */
+  .thermal-receipt-print {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    margin: 0 auto !important;
+    font-family: monospace !important;
+    font-size: 9pt !important;
+    line-height: 1.2 !important;
+  }
+}

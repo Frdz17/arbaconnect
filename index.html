@@ -2,39 +2,6 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      (function() {
-        try {
-          var originalFetch = window.fetch;
-          var activeFetch = originalFetch;
-          Object.defineProperty(window, 'fetch', {
-            configurable: true,
-            enumerable: true,
-            get: function() {
-              return activeFetch;
-            },
-            set: function(fn) {
-              activeFetch = fn;
-            }
-          });
-        } catch (e1) {
-          try {
-            if (window.Window && Window.prototype) {
-              Object.defineProperty(Window.prototype, 'fetch', {
-                configurable: true,
-                enumerable: true,
-                get: function() {
-                  return activeFetch;
-                },
-                set: function(fn) {
-                  activeFetch = fn;
-                }
-              });
-            }
-          } catch (e2) {}
-        }
-      })();
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ArbaConnect - CV Arba'in Logistics ERP</title>
     <meta name="description" content="Enterprise distribution logistics, real-time FEFO stock ledger, B2B CRM, and field sales PWA for CV Arba'in Solo Raya." />
@@ -42,14 +9,266 @@
     <meta property="og:description" content="Enterprise distribution logistics, real-time FEFO stock ledger, B2B CRM, and field sales PWA for CV Arba'in Solo Raya." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Fonts & Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+    <!-- Mobile & PWA Full Display Metadata -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#005c55" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Pure Vanilla Stylesheets -->
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/layout.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/utilities.css" />
+    <link rel="stylesheet" href="css/print.css" />
   </head>
-  <body class="bg-[#f8f9ff] text-[#0b1c30] antialiased selection:bg-[#005c55] selection:text-white">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body>
+    <!-- App Shell Container -->
+    <div class="app-wrapper">
+      <!-- Fixed Global Header (64px) -->
+      <header class="app-header">
+        <!-- Brand Identity -->
+        <div class="header-brand" id="header-brand-logo" title="Kembali ke Dashboard Eksekutif">
+          <svg class="h-8 w-8 object-contain shrink-0" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Logo ArbaConnect">
+            <rect width="36" height="36" rx="9" fill="url(#arbaBrandGrad)" />
+            <!-- Herbal Leaf & Logistics Network Nodes Motif -->
+            <path d="M10 24C10 24 12 15 21 12C21 12 23 21 14 24C12 25 10 24 10 24Z" fill="#A3FAEF" opacity="0.95" />
+            <path d="M12 23C16 19 20 15 25 10" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" />
+            <circle cx="25" cy="10" r="3" fill="#5BB8FE" stroke="#FFFFFF" stroke-width="1.5" />
+            <circle cx="26" cy="22" r="2.2" fill="#FFFFFF" />
+            <path d="M17 19L26 22" stroke="#FFFFFF" stroke-width="1.5" stroke-dasharray="2 2" stroke-linecap="round" />
+            <defs>
+              <linearGradient id="arbaBrandGrad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#005C55" />
+                <stop offset="1" stop-color="#0F766E" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div class="header-brand-text">
+            <span class="brand-title">ArbaConnect</span>
+            <span class="brand-subtitle">CV Arba'in Logistics ERP</span>
+          </div>
+        </div>
+
+        <!-- 3-Category Live Quick Search -->
+        <div class="header-search">
+          <span class="material-symbols-outlined search-icon">search</span>
+          <input
+            type="text"
+            id="global-search-input"
+            placeholder="Cari SKU Herbal, Apotek Mitra, atau Faktur..."
+            autocomplete="off"
+          />
+          <button id="search-clear-btn" class="clear-btn hidden" type="button" title="Hapus Pencarian">
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
+          <div id="global-search-dropdown" class="search-dropdown hidden"></div>
+        </div>
+
+        <!-- Header Controls & Actions -->
+        <div class="header-actions">
+          <!-- Role Perspective Switcher -->
+          <div class="role-switcher-container">
+            <span class="material-symbols-outlined role-icon">tune</span>
+            <select id="role-perspective-select" class="role-select" title="Ganti Role Perspektif" aria-label="Ganti Role Perspektif">
+              <option value="executive">Direksi &amp; Manajemen</option>
+              <option value="field-sales">Field Sales (PWA)</option>
+              <option value="inventory">Admin Gudang &amp; Stok</option>
+              <option value="sales-ops">Admin Sales &amp; Verifikasi</option>
+            </select>
+            <span class="material-symbols-outlined dropdown-arrow">expand_more</span>
+          </div>
+
+          <!-- Online / Local Sync Status Indicator -->
+          <button id="header-online-btn" class="online-toggle-btn" type="button" title="Klik untuk simulasi mode Online / Offline">
+            <span id="header-online-dot" class="status-dot online"></span>
+            <span id="header-online-text" class="hidden sm:inline">Tersinkron</span>
+          </button>
+
+          <!-- Fullscreen Mode Toggle -->
+          <button id="header-fullscreen-btn" class="icon-btn" type="button" title="Mode Layar Penuh (Kiosk / F11)" aria-label="Mode Layar Penuh">
+            <span id="header-fullscreen-icon" class="material-symbols-outlined text-[18px]">fullscreen</span>
+          </button>
+
+          <!-- Dark Mode Toggle -->
+          <button id="header-dark-btn" class="icon-btn" type="button" title="Ganti Mode Gelap / Terang">
+            <span id="header-dark-icon" class="material-symbols-outlined text-[18px]">dark_mode</span>
+          </button>
+
+          <!-- Notification Menu -->
+          <div style="position: relative;">
+            <button id="header-notif-btn" class="icon-btn" type="button" title="Notifikasi Sistem">
+              <span class="material-symbols-outlined text-[18px]">notifications</span>
+              <span id="header-notif-badge" class="badge-dot hidden"></span>
+            </button>
+            <div id="header-notif-menu" class="notification-menu hidden">
+              <div class="flex items-center justify-between pb-2 border-b border-border-subtle">
+                <span class="font-semibold text-xs text-on-surface">Notifikasi Sistem</span>
+                <span id="notif-pending-count-label" class="text-xs text-primary font-medium">0 Pesanan Baru</span>
+              </div>
+              <div class="flex flex-col gap-1.5 py-1 text-xs">
+                <div id="notif-item-order" class="search-item flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-surface-container-low transition-colors">
+                  <span class="material-symbols-outlined text-primary text-[18px] shrink-0">shopping_bag</span>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-on-surface">Pesanan Baru Siap Validasi</span>
+                    <span class="text-[11px] text-on-surface-variant">Klik untuk membuka antrean pesanan</span>
+                  </div>
+                </div>
+                <div id="notif-item-rop" class="search-item flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-surface-container-low transition-colors">
+                  <span class="material-symbols-outlined text-amber-600 text-[18px] shrink-0">warning</span>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-on-surface">Peringatan Reorder Point (ROP)</span>
+                    <span class="text-[11px] text-on-surface-variant">Madu Randu mendekati ambang batas</span>
+                  </div>
+                </div>
+                <div id="notif-item-cdob" class="search-item flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-surface-container-low transition-colors">
+                  <span class="material-symbols-outlined text-emerald-600 text-[18px] shrink-0">verified</span>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-on-surface">Validasi Integritas CDOB &amp; FEFO</span>
+                    <span class="text-[11px] text-on-surface-variant">99.4% Kepatuhan batch tervalidasi</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Profile Pill -->
+          <div id="header-profile-pill" class="flex items-center gap-2 pl-2 border-l border-border-subtle cursor-pointer hover:opacity-80 transition-opacity" title="Profil Akun Pengguna">
+            <div class="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold">
+              <span class="material-symbols-outlined text-[18px]">person</span>
+            </div>
+            <div class="hidden xl:flex flex-col text-left">
+              <span class="text-xs text-on-surface font-semibold leading-tight">Admin Operasional</span>
+              <span class="text-[11px] text-on-surface-variant leading-none">CV Arba'in Logistik</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Dimmed Backdrop for Mobile / Unfolded Sidebar -->
+      <div id="sidebar-backdrop" class="sidebar-backdrop hidden" aria-hidden="true"></div>
+
+      <!-- Collapsible App Sidebar (64px collapsed, 256px expanded) -->
+      <aside id="app-sidebar" class="app-sidebar collapsed">
+        <div class="flex flex-col gap-1 px-2">
+          <div class="flex items-center justify-between px-2 py-1 mb-1">
+            <span class="sidebar-header-expanded text-on-surface-variant text-[11px] uppercase tracking-wider font-semibold">
+              Navigasi Modul
+            </span>
+            <span class="sidebar-header-collapsed mx-auto text-[10px] text-on-surface-variant uppercase font-semibold">
+              Menu
+            </span>
+          </div>
+
+          <nav class="sidebar-nav">
+            <!-- 1. Executive Dashboard -->
+            <button class="nav-button active" data-path="executive-dashboard" type="button" title="Executive Dashboard">
+              <div class="nav-button-content">
+                <span class="material-symbols-outlined text-[20px] shrink-0">dashboard</span>
+                <span class="nav-label">Executive Dashboard</span>
+              </div>
+            </button>
+
+            <!-- 2. Inventory & Stock Ledger -->
+            <button class="nav-button" data-path="inventory-stock-ledger" type="button" title="Inventory &amp; Stock Ledger">
+              <div class="nav-button-content">
+                <span class="material-symbols-outlined text-[20px] shrink-0">inventory_2</span>
+                <span class="nav-label">Inventory &amp; Stock Ledger</span>
+              </div>
+              <span id="badge-inventory" class="nav-badge-pill hidden">0</span>
+            </button>
+
+            <!-- 3. B2B CRM Directory -->
+            <button class="nav-button" data-path="b2b-crm-directory" type="button" title="B2B CRM &amp; Directory">
+              <div class="nav-button-content">
+                <span class="material-symbols-outlined text-[20px] shrink-0">store</span>
+                <span class="nav-label">B2B CRM &amp; Directory</span>
+              </div>
+            </button>
+
+            <!-- 4. Order Approval Queue -->
+            <button class="nav-button" data-path="order-approval-queue" type="button" title="Order Approval Queue">
+              <div class="nav-button-content">
+                <span class="material-symbols-outlined text-[20px] shrink-0">fact_check</span>
+                <span class="nav-label">Order Approval Queue</span>
+              </div>
+              <span id="badge-orders" class="nav-badge-pill hidden">0</span>
+            </button>
+
+            <!-- 5. Field Sales PWA Preview -->
+            <button class="nav-button" data-path="field-sales-pwa-preview" type="button" title="Field Sales PWA Preview">
+              <div class="nav-button-content">
+                <span class="material-symbols-outlined text-[20px] shrink-0">smartphone</span>
+                <span class="nav-label">Field Sales PWA Preview</span>
+              </div>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Sidebar Bottom Compliance & Fold / Unfold Control -->
+        <div class="sidebar-bottom px-2">
+          <!-- CDOB Compliance Status (Expanded) -->
+          <div class="cdob-full-card cdob-card">
+            <div class="cdob-card-header">
+              <span class="material-symbols-outlined text-[15px]">verified</span>
+              <span>Integritas CDOB &amp; FEFO</span>
+            </div>
+            <p>Penerapan mutasi stok tanggal kedaluwarsa terdekat aktif.</p>
+          </div>
+
+          <!-- CDOB Compliance Icon (Collapsed) -->
+          <div class="cdob-icon-only" title="Integritas CDOB &amp; FEFO Aktif">
+            <span class="material-symbols-outlined text-[18px]">verified</span>
+          </div>
+
+          <!-- Static Fold / Unfold Toggle Button -->
+          <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" type="button" title="Buka Menu Samping">
+            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- App Content Wrapper -->
+      <div id="app-content-wrapper" class="app-content-wrapper">
+        <main id="main-view-container" class="main-view-container"></main>
+
+        <!-- Application Footer -->
+        <footer class="app-footer">
+          <div class="flex items-center gap-2">
+            <span class="footer-version">ArbaConnect v2.5.0-Vanilla</span>
+            <span>&bull;</span>
+            <span>Arsitektur Logistik Distribusi Herbal Solo Raya</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs">
+            <span>Gudang Utama: Kartasura</span>
+            <span>&bull;</span>
+            <span>Standar Kepatuhan: BPOM &amp; CDOB</span>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal & Toast Dynamic Mounting Containers -->
+    <div id="modal-container"></div>
+    <div id="toast-container"></div>
+
+    <!-- Pure Vanilla Scripts Loaded in Deterministic Dependency Order -->
+    <script src="js/data.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/views/executiveDashboard.js"></script>
+    <script src="js/views/inventoryLedger.js"></script>
+    <script src="js/views/b2bCrm.js"></script>
+    <script src="js/views/orderApproval.js"></script>
+    <script src="js/views/fieldSalesPwa.js"></script>
+    <script src="js/app.js"></script>
   </body>
 </html>
-
