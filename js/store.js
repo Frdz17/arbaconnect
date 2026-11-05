@@ -4,7 +4,7 @@
  */
 
 window.ArbaStore = (function() {
-  const STORAGE_KEY = 'arbaconnect_erp_state_v2';
+  const STORAGE_KEY = 'arbaconnect_erp_state_v3';
 
   // Load from local storage or fallback to ArbaData initial values
   function loadInitialState() {
@@ -50,6 +50,9 @@ window.ArbaStore = (function() {
           supplierPOs: parsed.supplierPOs || ArbaData.supplierPOs,
           salesVisits: parsed.salesVisits || ArbaData.salesVisits,
           driverManifests: parsed.driverManifests || ArbaData.driverManifests,
+          salesTeam: parsed.salesTeam || JSON.parse(JSON.stringify(ArbaData.salesTeam)),
+          visitLogs: parsed.visitLogs || JSON.parse(JSON.stringify(ArbaData.visitLogs)),
+          currentSalesRep: parsed.currentSalesRep || 'Budi Santoso',
           offlineQueue: parsed.offlineQueue || []
         };
       }
@@ -71,6 +74,9 @@ window.ArbaStore = (function() {
       supplierPOs: JSON.parse(JSON.stringify(ArbaData.supplierPOs)),
       salesVisits: JSON.parse(JSON.stringify(ArbaData.salesVisits)),
       driverManifests: JSON.parse(JSON.stringify(ArbaData.driverManifests)),
+      salesTeam: JSON.parse(JSON.stringify(ArbaData.salesTeam)),
+      visitLogs: JSON.parse(JSON.stringify(ArbaData.visitLogs)),
+      currentSalesRep: 'Budi Santoso',
       offlineQueue: []
     };
   }
@@ -95,6 +101,9 @@ window.ArbaStore = (function() {
         supplierPOs: state.supplierPOs,
         salesVisits: state.salesVisits,
         driverManifests: state.driverManifests,
+        salesTeam: state.salesTeam,
+        visitLogs: state.visitLogs,
+        currentSalesRep: state.currentSalesRep,
         offlineQueue: state.offlineQueue
       }));
     } catch (e) {
@@ -118,6 +127,12 @@ window.ArbaStore = (function() {
   }
 
   function showToast(message, icon = 'check_circle') {
+    // Delegasikan ke Toast Manager global (#toast-container di index.html).
+    if (window.ArbaApp && typeof window.ArbaApp.showToast === 'function') {
+      window.ArbaApp.showToast(message, icon);
+      return;
+    }
+
     const toastEl = document.getElementById('toast-popup');
     const toastMsg = document.getElementById('toast-message');
     const toastIcon = document.getElementById('toast-icon');
@@ -133,6 +148,158 @@ window.ArbaStore = (function() {
     toastTimer = setTimeout(() => {
       toastEl.style.display = 'none';
     }, 3500);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helper Inti: waktu, pencarian produk, status ROP, mutasi stok, kredit outlet
+  // ---------------------------------------------------------------------------
+  const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function nowStamp() {
+    const d = new Date();
+    return `${pad2(d.getDate())} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()} • ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())} WIB`;
+  }
+
+  function todayLabel() {
+    const d = new Date();
+    return `${pad2(d.getDate())} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  function pseudoHash(seed) {
+    // Hash deterministik ringan (FNV-1a) untuk jejak audit buku besar
+    let h = 0x811c9dc5;
+    const s = String(seed) + Date.now() + Math.random();
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    const hex = h.toString(16).padStart(8, '0');
+    return `${hex.slice(0, 4)}...${hex.slice(4, 8)}`;
+  }
+
+  function newLedgerId() {
+    return `LEDG-${Math.floor(10000 + Math.random() * 90000)}`;
+  }
+
+  function normalizeSku(sku) {
+    return String(sku || '').toUpperCase().replace(/SKU-|ARB-|-/g, '');
+  }
+
+  function findProduct(sku, name) {
+    const nSku = normalizeSku(sku);
+    return state.products.find(p => p.sku === sku || normalizeSku(p.sku) === nSku) ||
+      (name ? state.products.find(p =>
+        p.name.toLowerCase().includes(String(name).toLowerCase()) ||
+        String(name).toLowerCase().includes(p.name.toLowerCase())
+      ) : undefined);
+  }
+
+  function computeProductStatus(prod) {
+    if (prod.stock <= prod.rop) return 'below-rop';
+    if (prod.fefoStatus && prod.fefoStatus.indexOf('Kritis') === 0) return 'critical-expiry';
+    return 'optimal';
+  }
+
+  function isCreditTerm(terms) {
+    return !/COD|Tunai/i.test(String(terms || ''));
+  }
+
+  function findOutlet(idOrCode) {
+    return state.outlets.find(o => o.id === idOrCode || o.code === idOrCode);
+  }
+
+  /** Cek ketersediaan stok semua item pesanan. Mengembalikan daftar kekurangan. */
+  function checkStockAvailability(items) {
+    const shortages = [];
+    (items || []).forEach(item => {
+      const prod = findProduct(item.sku, item.name);
+      if (!prod) return;
+      if (prod.stock < item.quantity) {
+        shortages.push({ sku: prod.sku, name: prod.name, requested: item.quantity, available: prod.stock, shortBy: item.quantity - prod.stock });
+      }
+    });
+    return shortages;
+  }
+
+  /**
+   * Potong stok fisik untuk seluruh item pesanan + catat baris KELUAR ke buku besar.
+   * Mengembalikan daftar produk yang baru saja menembus batas ROP (low-stock alert).
+   */
+  function deductOrderStock(order) {
+    const lowStockHits = [];
+    const rows = [];
+    order.items.forEach(item => {
+      const prod = findProduct(item.sku, item.name);
+      if (!prod) return;
+      const prev = prod.stock;
+      prod.stock = Math.max(0, prev - item.quantity);
+      prod.status = computeProductStatus(prod);
+      if (prev > prod.rop && prod.stock <= prod.rop) lowStockHits.push(prod.name);
+      rows.push({
+        id: newLedgerId(),
+        timestamp: nowStamp(),
+        docRef: order.clientUuid,
+        skuName: prod.name,
+        skuCode: prod.sku,
+        batch: String(item.batch || prod.activeBatch).replace('Batch: ', ''),
+        type: 'KELUAR',
+        quantity: -item.quantity,
+        finalStock: prod.stock,
+        operator: order.salesRep,
+        operatorRole: `Field Sales ${order.salesRepId || ''}`.trim(),
+        hash: pseudoHash(order.clientUuid + prod.sku)
+      });
+    });
+    state.ledger = [...rows, ...state.ledger];
+    order.stockDeducted = true;
+    order.syncStatus = 'SYNCED_DEDUCTED';
+    order.stockWarning = undefined;
+    return lowStockHits;
+  }
+
+  /** Kembalikan stok (RETUR) bila pesanan yang sudah memotong stok dibatalkan. */
+  function restoreOrderStock(order, reason) {
+    const rows = [];
+    order.items.forEach(item => {
+      const prod = findProduct(item.sku, item.name);
+      if (!prod) return;
+      prod.stock += item.quantity;
+      prod.status = computeProductStatus(prod);
+      rows.push({
+        id: newLedgerId(),
+        timestamp: nowStamp(),
+        docRef: order.clientUuid,
+        skuName: prod.name,
+        skuCode: prod.sku,
+        batch: String(item.batch || prod.activeBatch).replace('Batch: ', ''),
+        type: 'RETUR',
+        quantity: item.quantity,
+        finalStock: prod.stock,
+        operator: 'Admin Penjualan',
+        operatorRole: `Pembatalan: ${reason || 'Order ditolak'}`,
+        hash: pseudoHash(order.clientUuid + prod.sku + 'R')
+      });
+    });
+    state.ledger = [...rows, ...state.ledger];
+    order.stockDeducted = false;
+  }
+
+  function applyOutletCredit(order, sign) {
+    const outlet = findOutlet(order.outletId);
+    if (!outlet || !isCreditTerm(order.terms)) return;
+    outlet.creditUsed = Math.max(0, (outlet.creditUsed || 0) + sign * order.totalAmount);
+    outlet.creditRemaining = Math.max(0, outlet.creditLimit - outlet.creditUsed);
+    const ratio = outlet.creditLimit ? outlet.creditUsed / outlet.creditLimit : 0;
+    if (outlet.creditStatus !== 'Overdue') {
+      outlet.creditStatus = ratio >= 0.9 ? 'Perhatian' : 'Lancar';
+    }
+    order.creditApplied = sign > 0;
+  }
+
+  function lowStockMessage(hits) {
+    return hits.length ? ` ⚠ Low-stock: ${hits.join(', ')} di bawah ROP!` : '';
   }
 
   function setPath(path) {
@@ -181,12 +348,28 @@ window.ArbaStore = (function() {
     state.isOnline = !state.isOnline;
 
     if (state.isOnline && state.offlineQueue.length > 0) {
-      state.orders = state.orders.map(o =>
-        o.syncStatus === 'OFFLINE_QUEUED' ? { ...o, syncStatus: 'SYNCED_DEDUCTED' } : o
-      );
+      // Sinkronisasi antrean offline: potong stok otomatis untuk setiap pesanan
+      let lowHits = [];
+      let waiting = 0;
+      const queuedIds = state.offlineQueue.map(q => q.id);
+      state.orders.forEach(o => {
+        if (queuedIds.indexOf(o.id) === -1 || o.syncStatus !== 'OFFLINE_QUEUED') return;
+        const shortages = checkStockAvailability(o.items);
+        if (shortages.length === 0) {
+          lowHits = lowHits.concat(deductOrderStock(o));
+        } else {
+          o.syncStatus = 'PENDING_WAREHOUSE';
+          o.stockWarning = 'Menunggu stok: ' + shortages.map(s => `${s.name} (kurang ${s.shortBy} unit)`).join(', ');
+          waiting++;
+        }
+      });
       const count = state.offlineQueue.length;
       state.offlineQueue = [];
-      showToast(`Online kembali: ${count} pesanan lokal disinkronisasi ke pusat!`, 'cloud_done');
+      showToast(
+        `Online kembali: ${count} pesanan lokal disinkronisasi & stok dipotong otomatis` +
+        (waiting ? ` (${waiting} menunggu stok)` : '') + '.' + lowStockMessage(lowHits),
+        'cloud_done'
+      );
     } else {
       showToast(
         state.isOnline
@@ -217,7 +400,7 @@ window.ArbaStore = (function() {
 
     const newEntry = {
       id: `LEDG-${Math.floor(10000 + Math.random() * 90000)}`,
-      timestamp: 'Baru saja • Real-time',
+      timestamp: nowStamp(),
       docRef: docRef || `PO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
       skuName: prodName,
       skuCode: sku,
@@ -235,60 +418,40 @@ window.ArbaStore = (function() {
     notify();
   }
 
-  function approveOrder(orderId) {
+  function approveOrder(orderId, silent) {
     const order = state.orders.find(o => o.id === orderId || o.clientUuid === orderId);
     if (!order) return;
 
-    // Deduct stock for each item using flexible clean matching
-    order.items.forEach(item => {
-      const prod = state.products.find(p =>
-        p.sku === item.sku ||
-        p.sku.replace(/SKU-|ARB-|-/g, '') === item.sku.replace(/SKU-|ARB-|-/g, '') ||
-        p.name.toLowerCase().includes(item.name.toLowerCase()) ||
-        item.name.toLowerCase().includes(p.name.toLowerCase())
-      );
-
-      if (prod) {
-        prod.stock = Math.max(0, prod.stock - item.quantity);
-        prod.status = prod.stock <= prod.safetyStock ? 'below-rop' : (prod.stock <= prod.rop ? 'below-rop' : 'optimal');
-      }
-    });
-
-    // Add immutable ledger row for each item
-    const newLedgerRows = order.items.map(item => ({
-      id: `LEDG-${Math.floor(10000 + Math.random() * 90000)}`,
-      timestamp: 'Baru saja • Real-time',
-      docRef: order.clientUuid,
-      skuName: item.name,
-      skuCode: item.sku,
-      batch: item.batch.replace('Batch: ', ''),
-      type: 'KELUAR',
-      quantity: -item.quantity,
-      finalStock: Math.max(0, item.remainingBatchStock - item.quantity),
-      operator: order.salesRep,
-      operatorRole: `Field Sales ${order.salesRepId || '#FS-04'}`,
-      hash: `${Math.random().toString(36).substring(2, 6)}...${Math.random().toString(36).substring(2, 6)}`
-    }));
-
-    state.ledger = [...newLedgerRows, ...state.ledger];
+    // Pesanan dari PWA (online) sudah memotong stok saat dibuat — jangan potong dua kali.
+    let lowHits = [];
+    if (!order.stockDeducted) {
+      lowHits = deductOrderStock(order);
+    }
 
     order.status = 'APPROVED';
     order.syncStatus = 'SYNCED_DEDUCTED';
 
-    showToast(`Pesanan ${order.outletName} disetujui & stok dipotong otomatis!`, 'task_alt');
-    notify();
+    if (!silent) {
+      showToast(`Pesanan ${order.outletName} disetujui & dialokasikan ke armada.${lowStockMessage(lowHits)}`, 'task_alt');
+      notify();
+    }
+    return lowHits;
   }
 
   function batchApproveOrders(orderIds) {
-    orderIds.forEach(id => approveOrder(id));
-    showToast(`${orderIds.length} pesanan berhasil disetujui & dialokasikan ke armada!`, 'done_all');
+    let lowHits = [];
+    orderIds.forEach(id => { lowHits = lowHits.concat(approveOrder(id, true) || []); });
+    showToast(`${orderIds.length} pesanan berhasil disetujui & dialokasikan ke armada!${lowStockMessage(lowHits)}`, 'done_all');
+    notify();
   }
 
   function rejectOrder(orderId, reason) {
-    const order = state.orders.find(o => o.id === orderId);
+    const order = state.orders.find(o => o.id === orderId || o.clientUuid === orderId);
     if (order) {
+      if (order.stockDeducted) restoreOrderStock(order, reason);
+      if (order.creditApplied) applyOutletCredit(order, -1);
       order.status = 'REJECTED';
-      showToast(`Pesanan #${orderId} ditolak: ${reason || 'Pembatalan manual'}`, 'block');
+      showToast(`Pesanan #${orderId} ditolak: ${reason || 'Pembatalan manual'}${order.stockDeducted === false ? ' — stok dikembalikan' : ''}`, 'block');
       notify();
     }
   }
@@ -345,7 +508,7 @@ window.ArbaStore = (function() {
 
     const newEntry = {
       id: `LEDG-${Math.floor(10000 + Math.random() * 90000)}`,
-      timestamp: 'Baru saja • Real-time',
+      timestamp: nowStamp(),
       docRef: `ADJ-${Math.floor(100 + Math.random() * 900)}`,
       skuName: prodName,
       skuCode: sku,
@@ -460,6 +623,10 @@ window.ArbaStore = (function() {
 
   function submitFieldSalesOrder(newOrder) {
     const id = `ord-${Math.random().toString(36).substring(2, 7)}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+    const outlet = findOutlet(newOrder.outletId);
+    const rep = state.salesTeam.find(s => s.name === newOrder.salesRep);
+    const items = newOrder.items || [];
+    const totalAmount = newOrder.totalAmount || items.reduce((s, it) => s + it.subtotal, 0);
 
     const orderObj = {
       id,
@@ -468,36 +635,370 @@ window.ArbaStore = (function() {
       outletName: newOrder.outletName || 'Apotek Mitra',
       address: newOrder.address || 'Surakarta',
       city: newOrder.city || 'Surakarta',
-      salesRep: newOrder.salesRep || 'Budi Santoso',
-      salesRepId: 'REP-SR-04',
+      salesRep: newOrder.salesRep || state.currentSalesRep || 'Budi Santoso',
+      salesRepId: newOrder.salesRepId || (rep ? rep.id : 'REP-SR-04'),
       orderTime: 'Baru saja (<1m lalu)',
       orderTimestamp: Date.now(),
-      totalAmount: newOrder.totalAmount || 0,
+      totalAmount,
       terms: newOrder.terms || 'Net 30 Hari',
-      limitMax: 15000000,
-      limitRemaining: 8000000,
-      geofenceValid: true,
-      geofenceCoords: '-7.5583, 110.8214 (Presisi GPS)',
+      limitMax: outlet ? outlet.creditLimit : 15000000,
+      limitRemaining: outlet ? Math.max(0, outlet.creditRemaining - (isCreditTerm(newOrder.terms) ? totalAmount : 0)) : 0,
+      geofenceValid: newOrder.geofenceValid !== undefined ? newOrder.geofenceValid : true,
+      geofenceCoords: newOrder.geofenceCoords || '-7.5583, 110.8214 (Presisi GPS)',
+      gpsDistance: newOrder.gpsDistance,
+      notes: newOrder.notes || '',
       npwp: '01.324.891.4-528.000',
       status: 'PENDING',
       syncStatus: state.isOnline ? 'SYNCED_DEDUCTED' : 'OFFLINE_QUEUED',
-      priority: 'Normal',
-      items: newOrder.items || []
+      priority: totalAmount >= 10000000 ? 'High' : 'Normal',
+      stockDeducted: false,
+      items
     };
 
-    if (!state.isOnline) {
-      state.offlineQueue = [orderObj, ...state.offlineQueue];
+    // 1) Sinkronisasi stok otomatis: potong stok saat pesanan dibuat (online)
+    let lowHits = [];
+    let shortages = [];
+    if (state.isOnline) {
+      shortages = checkStockAvailability(items);
+      if (shortages.length === 0) {
+        lowHits = deductOrderStock(orderObj);
+      } else {
+        orderObj.syncStatus = 'PENDING_WAREHOUSE';
+        orderObj.priority = 'High';
+        orderObj.stockWarning = 'Menunggu stok: ' + shortages.map(s => `${s.name} (kurang ${s.shortBy} unit)`).join(', ');
+      }
+    } else {
+      state.offlineQueue = [{ id: orderObj.id, createdAt: Date.now() }, ...state.offlineQueue];
+    }
+
+    // 2) Kredit outlet & riwayat transaksi CRM
+    applyOutletCredit(orderObj, 1);
+    if (outlet) {
+      outlet.lastOrderDate = todayLabel();
+      outlet.ytdTotal = (outlet.ytdTotal || 0) + totalAmount;
     }
 
     state.orders = [orderObj, ...state.orders];
 
-    showToast(
-      state.isOnline
-        ? `Pesanan ${orderObj.outletName} dikirim ke antrean pusat!`
-        : `Pesanan disimpan di offline storage lokal (akan sync otomatis saat online)`,
-      state.isOnline ? 'cloud_upload' : 'save'
-    );
+    // 3) Catat aktivitas kunjungan (hasil: ORDER) untuk KPI produktivitas sales
+    recordVisit({
+      salesRep: orderObj.salesRep,
+      outletId: orderObj.outletId,
+      outletName: orderObj.outletName,
+      outcome: 'ORDER',
+      gpsDistance: newOrder.gpsDistance,
+      notes: `Order ${items.length} SKU • ${window.ArbaUtils ? window.ArbaUtils.formatRupiah(totalAmount) : totalAmount}`,
+      orderId: orderObj.id
+    });
+
+    let msg;
+    if (!state.isOnline) {
+      msg = 'Pesanan disimpan di offline storage lokal (stok dipotong otomatis saat online kembali)';
+    } else if (shortages.length) {
+      msg = `Pesanan ${orderObj.outletName} masuk antrean "Menunggu Stok" — ${shortages.length} SKU kurang`;
+    } else {
+      msg = `Pesanan ${orderObj.outletName} tersinkron & stok gudang terpotong otomatis.${lowStockMessage(lowHits)}`;
+    }
+    showToast(msg, !state.isOnline ? 'save' : (shortages.length || lowHits.length ? 'warning' : 'cloud_done'));
     notify();
+    return { order: orderObj, shortages, lowStock: lowHits };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Aktivitas Kunjungan Lapangan (Canvassing / Visit-only)
+  // ---------------------------------------------------------------------------
+  const VISIT_OUTCOME_LABELS = {
+    ORDER: 'Order Berhasil',
+    NO_ORDER_STOCK_FULL: 'Stok Outlet Masih Penuh',
+    COLLECTION: 'Penagihan Faktur',
+    FOLLOW_UP: 'Follow-up Berikutnya',
+    PIC_ABSENT: 'PIC/Apoteker Tidak di Tempat',
+    DISPLAY_CHECK: 'Cek Display & Merchandising'
+  };
+
+  function recordVisit({ salesRep, outletId, outletName, outcome, gpsDistance, notes, orderId }) {
+    const log = {
+      id: `VLOG-${Date.now().toString(36).toUpperCase()}`,
+      salesRep: salesRep || state.currentSalesRep,
+      outletId,
+      outletName,
+      timestamp: Date.now(),
+      outcome: outcome || 'FOLLOW_UP',
+      gpsDistance: gpsDistance !== undefined ? gpsDistance : null,
+      notes: notes || '',
+      orderId: orderId || null
+    };
+    state.visitLogs = [log, ...state.visitLogs];
+
+    const outlet = findOutlet(outletId);
+    if (outlet) {
+      const t = new Date();
+      outlet.lastVisitDate = `${todayLabel()}, ${pad2(t.getHours())}:${pad2(t.getMinutes())} WIB`;
+      outlet.visitNotes = `"${VISIT_OUTCOME_LABELS[log.outcome] || log.outcome} oleh ${log.salesRep}${notes ? ': ' + notes : ''}"`;
+    }
+
+    // Tandai jadwal kunjungan terkait sebagai selesai
+    state.salesVisits.forEach(v => {
+      if ((v.outletId === outletId) && v.status === 'TERJADWAL') v.status = 'SELESAI';
+    });
+    return log;
+  }
+
+  function logFieldVisit(params) {
+    const log = recordVisit(params);
+    showToast(`Kunjungan ${log.outletName} tercatat: ${VISIT_OUTCOME_LABELS[log.outcome]}`, 'where_to_vote');
+    notify();
+    return log;
+  }
+
+  function setCurrentSalesRep(name) {
+    state.currentSalesRep = name;
+    notify();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Migrasi / Impor Data Awal (CSV) — Outlet B2B & Master Produk
+  // ---------------------------------------------------------------------------
+  function toNumber(v) {
+    if (v === undefined || v === null || v === '') return NaN;
+    return Number(String(v).replace(/[^0-9,-]/g, '').replace(',', '.'));
+  }
+
+  const CITY_NAMES = { Solo: 'Surakarta', Surakarta: 'Surakarta', Sukoharjo: 'Sukoharjo', Karanganyar: 'Karanganyar', Klaten: 'Klaten', Boyolali: 'Boyolali', Sragen: 'Sragen' };
+
+  function importOutlets(rows) {
+    const result = { added: 0, updated: 0, errors: [] };
+    rows.forEach((r, idx) => {
+      const line = idx + 2;
+      const name = r.nama_outlet || r.nama;
+      if (!name) { result.errors.push(`Baris ${line}: kolom nama_outlet wajib diisi`); return; }
+      let city = (r.kota || 'Solo').trim();
+      if (city === 'Surakarta') city = 'Solo';
+      const limit = toNumber(r.limit_kredit);
+      const code = (r.kode_outlet || '').trim() ||
+        `${/minimarket|swalayan|toserba/i.test(r.tipe || '') ? 'MM' : 'AP'}-${city.slice(0, 3).toUpperCase()}-${String(state.outlets.length + 1).padStart(3, '0')}`;
+
+      const existing = findOutlet(code);
+      const data = {
+        name,
+        address: r.alamat || (existing ? existing.address : 'Solo Raya'),
+        city,
+        cityName: CITY_NAMES[city] || city,
+        type: r.tipe || (existing ? existing.type : 'Apotek Mandiri'),
+        picName: r.nama_pic || (existing ? existing.picName : '-'),
+        picPhone: (r.telepon_pic || (existing ? existing.picPhone : '')).replace(/[^0-9]/g, ''),
+        salesRep: r.sales_rep || (existing ? existing.salesRep : state.currentSalesRep),
+        terms: r.termin || (existing ? existing.terms : 'Net 30 Hari')
+      };
+
+      if (existing) {
+        Object.assign(existing, data);
+        if (!isNaN(limit)) {
+          existing.creditLimit = limit;
+          existing.creditRemaining = Math.max(0, limit - (existing.creditUsed || 0));
+        }
+        result.updated++;
+      } else {
+        const lim = isNaN(limit) ? 10000000 : limit;
+        state.outlets.push(Object.assign({
+          id: code,
+          code,
+          picRole: 'Apoteker Pengelola Apotek (APA)',
+          salesArea: data.cityName,
+          creditLimit: lim,
+          creditUsed: 0,
+          creditRemaining: lim,
+          creditStatus: 'Lancar',
+          lastOrderDate: '-',
+          orderFrequency: 'Migrasi Data Awal',
+          ytdTotal: toNumber(r.omset_ytd) || 0,
+          lastVisitDate: '-',
+          visitNotes: '"Data outlet hasil migrasi awal (impor CSV)."'
+        }, data));
+        result.added++;
+      }
+    });
+    if (result.added || result.updated) {
+      showToast(`Migrasi outlet selesai: ${result.added} baru, ${result.updated} diperbarui${result.errors.length ? `, ${result.errors.length} baris gagal` : ''}`, 'upload_file');
+      notify();
+    }
+    return result;
+  }
+
+  function importProducts(rows) {
+    const result = { added: 0, updated: 0, errors: [] };
+    rows.forEach((r, idx) => {
+      const line = idx + 2;
+      const sku = (r.sku || '').trim().toUpperCase();
+      const name = r.nama_produk || r.nama;
+      const stock = toNumber(r.stok);
+      if (!sku || !name) { result.errors.push(`Baris ${line}: kolom sku & nama_produk wajib diisi`); return; }
+      if (isNaN(stock) || stock < 0) { result.errors.push(`Baris ${line}: stok tidak valid`); return; }
+
+      const existing = state.products.find(p => p.sku === sku);
+      const ss = toNumber(r.safety_stock);
+      const rop = toNumber(r.rop);
+      const price = toNumber(r.harga_satuan);
+      const batch = r.batch_aktif || (existing ? existing.activeBatch : `BATCH-${new Date().getFullYear()}-MIG`);
+
+      if (existing) {
+        const delta = stock - existing.stock;
+        existing.name = name;
+        if (r.kategori) existing.category = r.kategori;
+        if (!isNaN(ss)) existing.safetyStock = ss;
+        if (!isNaN(rop)) existing.rop = rop;
+        if (!isNaN(price)) existing.unitPrice = price;
+        if (r.tanggal_ed) existing.fefoDate = r.tanggal_ed;
+        existing.activeBatch = batch;
+        existing.stock = stock;
+        existing.status = computeProductStatus(existing);
+        if (delta !== 0) {
+          state.ledger = [{
+            id: newLedgerId(), timestamp: nowStamp(), docRef: 'MIGRASI-CSV', skuName: name, skuCode: sku, batch,
+            type: 'PENYESUAIAN', quantity: delta, finalStock: stock,
+            operator: 'Admin Gudang', operatorRole: 'Migrasi Data Awal', hash: pseudoHash(sku)
+          }, ...state.ledger];
+        }
+        result.updated++;
+      } else {
+        const ssV = isNaN(ss) ? 50 : ss;
+        const ropV = isNaN(rop) ? ssV * 2 : rop;
+        const prod = {
+          sku, name,
+          category: r.kategori || 'Madu Herbal',
+          stock,
+          safetyStock: ssV,
+          rop: ropV,
+          ropFormula: `SS=${ssV} (migrasi)`,
+          activeBatch: batch,
+          fefoDate: r.tanggal_ed || '-',
+          fefoStatus: 'Aman (>6 Bulan)',
+          status: 'optimal',
+          unitPrice: isNaN(price) ? 0 : price,
+          icon: 'inventory_2'
+        };
+        prod.status = computeProductStatus(prod);
+        state.products.push(prod);
+        state.ledger = [{
+          id: newLedgerId(), timestamp: nowStamp(), docRef: 'SALDO-AWAL', skuName: name, skuCode: sku, batch,
+          type: 'MASUK', quantity: stock, finalStock: stock,
+          operator: 'Admin Gudang', operatorRole: 'Migrasi Data Awal', hash: pseudoHash(sku)
+        }, ...state.ledger];
+        result.added++;
+      }
+    });
+    if (result.added || result.updated) {
+      const below = state.products.filter(p => p.stock <= p.rop).length;
+      showToast(`Migrasi produk selesai: ${result.added} baru, ${result.updated} diperbarui. ${below} SKU di bawah ROP.`, 'upload_file');
+      notify();
+    }
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Analitik Terhitung (Selector) — semua KPI dashboard dihitung dari state live
+  // ---------------------------------------------------------------------------
+  function getAnalytics() {
+    const now = new Date();
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const activeOrders = state.orders.filter(o => o.status !== 'REJECTED');
+
+    const salesPerformance = state.salesTeam.map(rep => {
+      const logsToday = state.visitLogs.filter(l => l.salesRep === rep.name && l.timestamp >= dayStart);
+      const logsMonth = state.visitLogs.filter(l => l.salesRep === rep.name && l.timestamp >= monthStart);
+      const repOrders = activeOrders.filter(o => o.salesRep === rep.name);
+      const liveRevenue = repOrders.reduce((s, o) => s + o.totalAmount, 0);
+      const revenueMonth = rep.monthlyRevenueBase + liveRevenue;
+      const ordersToday = logsToday.filter(l => l.outcome === 'ORDER').length;
+      return {
+        id: rep.id,
+        name: rep.name,
+        area: rep.area,
+        dailyVisitTarget: rep.dailyVisitTarget,
+        monthlyRevenueTarget: rep.monthlyRevenueTarget,
+        visitsToday: logsToday.length,
+        ordersToday,
+        visitsMonth: rep.monthlyVisitBase + logsMonth.length,
+        revenueMonth,
+        ordersCount: repOrders.length,
+        revenuePct: rep.monthlyRevenueTarget ? Math.round((revenueMonth / rep.monthlyRevenueTarget) * 1000) / 10 : 0,
+        visitPct: rep.dailyVisitTarget ? Math.round((logsToday.length / rep.dailyVisitTarget) * 100) : 0,
+        effectiveCallRate: logsToday.length ? Math.round((ordersToday / logsToday.length) * 100) : 0,
+        lastActivity: logsToday.length ? Math.max.apply(null, logsToday.map(l => l.timestamp)) : null
+      };
+    }).sort((a, b) => b.revenuePct - a.revenuePct);
+
+    const revenueMonth = salesPerformance.reduce((s, r) => s + r.revenueMonth, 0);
+    const revenueTarget = state.salesTeam.reduce((s, r) => s + r.monthlyRevenueTarget, 0);
+    const visitsToday = salesPerformance.reduce((s, r) => s + r.visitsToday, 0);
+    const ordersToday = salesPerformance.reduce((s, r) => s + r.ordersToday, 0);
+    const visitTargetToday = state.salesTeam.reduce((s, r) => s + r.dailyVisitTarget, 0);
+    const activeReps = salesPerformance.filter(r => r.visitsToday > 0).length;
+    const liveRevenueToday = activeOrders.filter(o => o.orderTimestamp >= dayStart).reduce((s, o) => s + o.totalAmount, 0);
+
+    const baseline = (window.ArbaData && window.ArbaData.baseline) || { extraApotek: 0, extraMinimarket: 0 };
+    const sampleMinimarket = state.outlets.filter(o => /minimarket|swalayan|toserba/i.test(o.type)).length;
+    const sampleApotek = state.outlets.length - sampleMinimarket;
+    const apotekCount = baseline.extraApotek + sampleApotek;
+    const minimarketCount = baseline.extraMinimarket + sampleMinimarket;
+    const totalOutlets = apotekCount + minimarketCount;
+    const newOutlets = state.outlets.filter(o => !(window.ArbaData.outlets || []).some(s => s.id === o.id)).length;
+
+    // Outlet paling aktif: omset YTD + jumlah pesanan & kunjungan bulan ini
+    const topOutlets = state.outlets.map(o => {
+      const oOrders = activeOrders.filter(ord => ord.outletId === o.id || ord.outletId === o.code);
+      const visits = state.visitLogs.filter(l => l.outletId === o.id && l.timestamp >= monthStart).length;
+      return { id: o.id, name: o.name, city: o.cityName, type: o.type, ytdTotal: o.ytdTotal || 0, ordersCount: oOrders.length, visits, lastOrderDate: o.lastOrderDate };
+    }).sort((a, b) => b.ytdTotal - a.ytdTotal).slice(0, 5);
+
+    // Perputaran stok: keluar (buku besar) vs saldo, serta estimasi hari persediaan
+    const stockTurnover = state.products.map(p => {
+      const outQty = state.ledger.filter(l => l.skuCode === p.sku && l.type === 'KELUAR').reduce((s, l) => s + Math.abs(l.quantity), 0);
+      const m = /d=(\d+)/.exec(p.ropFormula || '');
+      const dailyDemand = m ? Number(m[1]) : Math.max(1, Math.round(p.safetyStock / 7));
+      return {
+        sku: p.sku,
+        name: p.name,
+        stock: p.stock,
+        rop: p.rop,
+        outQty,
+        dailyDemand,
+        daysOfCover: dailyDemand ? Math.round(p.stock / dailyDemand) : 0,
+        turnoverRatio: p.stock ? Math.round(((dailyDemand * 30) / p.stock) * 100) / 100 : 0,
+        belowRop: p.stock <= p.rop
+      };
+    }).sort((a, b) => a.daysOfCover - b.daysOfCover);
+
+    const belowRop = state.products.filter(p => p.stock <= p.rop);
+    const nearExpiry = state.products.filter(p => /Kritis|Mendekati/.test(p.fefoStatus || ''));
+
+    return {
+      revenueMonth,
+      revenueTarget,
+      revenuePct: revenueTarget ? Math.round((revenueMonth / revenueTarget) * 1000) / 10 : 0,
+      liveRevenueToday,
+      totalOutlets,
+      apotekCount,
+      minimarketCount,
+      apotekPct: totalOutlets ? Math.round((apotekCount / totalOutlets) * 100) : 0,
+      newOutlets,
+      visitsToday,
+      ordersToday,
+      visitTargetToday,
+      visitPct: visitTargetToday ? Math.round((visitsToday / visitTargetToday) * 1000) / 10 : 0,
+      effectiveCallRate: visitsToday ? Math.round((ordersToday / visitsToday) * 100) : 0,
+      activeReps,
+      totalReps: state.salesTeam.length,
+      salesPerformance,
+      topOutlets,
+      stockTurnover,
+      belowRop,
+      nearExpiry,
+      criticalSkuCount: new Set(belowRop.concat(nearExpiry).map(p => p.sku)).size,
+      pendingOrders: state.orders.filter(o => o.status === 'PENDING').length,
+      waitingStockOrders: state.orders.filter(o => o.status === 'PENDING' && o.syncStatus === 'PENDING_WAREHOUSE').length
+    };
   }
 
   function resetToDefaults() {
@@ -533,6 +1034,13 @@ window.ArbaStore = (function() {
     markOrderDelivered,
     addOutlet,
     submitFieldSalesOrder,
+    logFieldVisit,
+    setCurrentSalesRep,
+    checkStockAvailability,
+    importOutlets,
+    importProducts,
+    getAnalytics,
+    visitOutcomeLabels: VISIT_OUTCOME_LABELS,
     resetToDefaults
   };
 })();

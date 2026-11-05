@@ -28,6 +28,7 @@
     var orders = appState.orders;
     var products = appState.products;
     var outlets = appState.outlets;
+    var analytics = window.ArbaStore.getAnalytics();
 
     // Filter orders in stream
     var filteredOrders = orders.filter(function (order) {
@@ -101,7 +102,7 @@
           </div>
         </div>
 
-        <!-- Section 1: KPI Stat Grid -->
+        <!-- Section 1: KPI Stat Grid (100% Live Reactive) -->
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <!-- Card 1: Omset Bulanan -->
           <div class="bg-surface-container-lowest p-5 rounded-xl border border-border-subtle/60 flex flex-col justify-between">
@@ -116,16 +117,16 @@
                 </span>
               </div>
               <div class="text-2xl text-on-surface tracking-tight font-bold mb-1">
-                Rp 482.650<span class="text-on-surface-variant font-medium text-base">.000</span>
+                ${window.ArbaUtils.formatRupiah(analytics.revenueMonth)}
               </div>
               <div class="flex items-center justify-between text-xs text-on-surface-variant mb-2">
-                <span>Target: Rp 500.000.000</span>
-                <span class="font-semibold text-primary">96.5%</span>
+                <span>Target: ${window.ArbaUtils.formatRupiah(analytics.revenueTarget)}</span>
+                <span class="font-semibold text-primary">${analytics.revenuePct}%</span>
               </div>
             </div>
             <!-- Progress Bar -->
             <div class="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden mt-1">
-              <div class="bg-primary h-full rounded-full transition-all duration-700" style="width: 96.5%;"></div>
+              <div class="bg-primary h-full rounded-full transition-all duration-700" style="width: ${Math.min(100, analytics.revenuePct)}%;"></div>
             </div>
           </div>
 
@@ -137,26 +138,26 @@
                   Outlet B2B Aktif
                 </span>
                 <span class="text-xs font-medium text-primary">
-                  +6 Mitra Baru
+                  +${6 + analytics.newOutlets} Mitra Baru
                 </span>
               </div>
               <div class="flex items-baseline gap-2 mb-1">
                 <span class="text-2xl text-on-surface tracking-tight font-bold">
-                  ${148 + (outlets.length - 11)}
+                  ${analytics.totalOutlets}
                 </span>
                 <span class="text-xs text-on-surface-variant font-medium">
                   Titik Distribusi
                 </span>
               </div>
               <div class="flex items-center gap-1.5 text-xs text-on-surface-variant mt-2 mb-2">
-                <span class="text-on-surface font-semibold">92 Apotek (62%)</span>
+                <span class="text-on-surface font-semibold">${analytics.apotekCount} Apotek (${analytics.apotekPct}%)</span>
                 <span aria-hidden="true">·</span>
-                <span class="text-on-surface font-semibold">56 Minimarket (38%)</span>
+                <span class="text-on-surface font-semibold">${analytics.minimarketCount} Minimarket (${100 - analytics.apotekPct}%)</span>
               </div>
             </div>
             <div class="w-full flex rounded-full h-1.5 overflow-hidden bg-surface-container-high">
-              <div class="bg-primary h-full" style="width: 62%;" title="Apotek: 62%"></div>
-              <div class="bg-secondary h-full" style="width: 38%;" title="Minimarket: 38%"></div>
+              <div class="bg-primary h-full" style="width: ${analytics.apotekPct}%;" title="Apotek: ${analytics.apotekPct}%"></div>
+              <div class="bg-secondary h-full" style="width: ${100 - analytics.apotekPct}%;" title="Minimarket: ${100 - analytics.apotekPct}%"></div>
             </div>
           </div>
 
@@ -169,24 +170,27 @@
                 </span>
                 <span class="flex items-center gap-1 text-xs font-semibold text-emerald-700">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                  84.4% Capaian
+                  ${analytics.visitPct}% Capaian
                 </span>
               </div>
               <div class="flex items-baseline gap-1.5 mb-1">
                 <span class="text-2xl text-on-surface tracking-tight font-bold">
-                  38
+                  ${analytics.visitsToday}
                 </span>
                 <span class="text-sm text-on-surface-variant font-medium">
-                  / 45 Target
+                  / ${analytics.visitTargetToday} Target
+                </span>
+                <span class="text-xs text-primary font-semibold ml-1">
+                  (EC: ${analytics.effectiveCallRate}%)
                 </span>
               </div>
               <div class="flex items-center gap-1.5 text-xs text-on-surface-variant mt-2 mb-2">
                 <span class="material-symbols-outlined text-[15px] text-primary">my_location</span>
-                <span>5 Sales Rep Aktif (GPS Terverifikasi)</span>
+                <span>${analytics.activeReps}/${analytics.totalReps} Sales Rep Aktif (GPS Valid)</span>
               </div>
             </div>
             <div class="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
-              <div class="bg-emerald-600 h-full rounded-full transition-all duration-700" style="width: 84.4%;"></div>
+              <div class="bg-emerald-600 h-full rounded-full transition-all duration-700" style="width: ${Math.min(100, analytics.visitPct)}%;"></div>
             </div>
           </div>
 
@@ -199,20 +203,20 @@
                 </span>
                 <span class="flex items-center gap-1 text-xs font-semibold text-amber-700">
                   <span class="material-symbols-outlined text-[14px]">warning</span>
-                  Perlu Tindakan
+                  ${analytics.criticalSkuCount > 0 ? 'Perlu Tindakan' : 'Stok Aman'}
                 </span>
               </div>
               <div class="flex items-baseline gap-1.5 mb-1">
-                <span class="text-2xl text-rose-600 tracking-tight font-bold">
-                  4
+                <span class="text-2xl ${analytics.criticalSkuCount > 0 ? 'text-rose-600' : 'text-emerald-600'} tracking-tight font-bold">
+                  ${analytics.criticalSkuCount}
                 </span>
                 <span class="text-xs text-on-surface-variant font-medium">
                   SKU Kritis Terdeteksi
                 </span>
               </div>
               <p class="text-xs text-on-surface-variant leading-tight mt-1 mb-2">
-                <span class="font-semibold text-rose-600">2 butuh restock</span> · 
-                <span class="font-semibold text-amber-700">2 batch near-expiry</span>
+                <span class="font-semibold text-rose-600">${analytics.belowRop.length} di bawah ROP</span> · 
+                <span class="font-semibold text-amber-700">${analytics.nearExpiry.length} batch near-expiry</span>
               </p>
             </div>
             <button
@@ -220,8 +224,8 @@
               class="flex items-center justify-between bg-surface-container-low px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-container transition-colors cursor-pointer border border-border-subtle/40"
               type="button"
             >
-              <span class="text-xs text-on-surface font-medium">
-                Prioritas FEFO: Madu Habbatus
+              <span class="text-xs text-on-surface font-medium truncate">
+                ${analytics.belowRop[0] ? 'Prioritas ROP: ' + analytics.belowRop[0].name : 'Lihat Buku Besar Stok'}
               </span>
               <span class="material-symbols-outlined text-primary text-[16px]">chevron_right</span>
             </button>
@@ -485,6 +489,111 @@
                     </span>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2B: Produktivitas Tim Sales Lapangan & Perputaran Stok Produk (Sesuai Kebutuhan Tantangan ARB-02) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+          <!-- Panel Kiri (7 Kolom): Leaderboard Produktivitas & Target Tim Sales -->
+          <div class="lg:col-span-7 bg-surface-container-lowest p-space-lg rounded-xl shadow-xs border border-border-subtle/40 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-bold">
+                  Monitoring Kinerja Lapangan Real-Time
+                </span>
+                <h2 class="font-title-sm text-title-sm text-on-surface font-bold">
+                  Rekap Produktivitas &amp; Target Capaian Tim Sales
+                </h2>
+              </div>
+              <span class="px-2.5 py-1 rounded-full bg-surface-container-low text-xs font-semibold text-primary border border-border-subtle/40">
+                Effective Call: ${analytics.effectiveCallRate}%
+              </span>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-border-subtle/40">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-surface-container-low text-on-surface-variant uppercase tracking-wider text-[11px]">
+                    <th class="px-3 py-2 font-bold">Sales Rep &amp; Rayon</th>
+                    <th class="px-3 py-2 font-bold text-center">Kunjungan Hari Ini</th>
+                    <th class="px-3 py-2 font-bold text-center">Effective Call</th>
+                    <th class="px-3 py-2 font-bold text-right">Realisasi vs Target Bulan</th>
+                    <th class="px-3 py-2 font-bold text-right">Capaian</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle text-on-surface">
+                  ${analytics.salesPerformance.map(function (rep) {
+                    var badgeColor = rep.revenuePct >= 85
+                      ? 'bg-status-success-bg text-status-success-text'
+                      : (rep.revenuePct >= 70 ? 'bg-status-warning-bg text-status-warning-text' : 'bg-rose-100 text-rose-700');
+                    return `
+                      <tr class="hover:bg-surface-container-low/50 transition-colors">
+                        <td class="px-3 py-2.5">
+                          <div class="font-semibold text-on-surface">${rep.name}</div>
+                          <div class="text-[11px] text-on-surface-variant">${rep.area} · ${rep.id}</div>
+                        </td>
+                        <td class="px-3 py-2.5 text-center font-mono font-semibold">
+                          ${rep.visitsToday} / ${rep.dailyVisitTarget}
+                        </td>
+                        <td class="px-3 py-2.5 text-center">
+                          <span class="font-semibold text-primary">${rep.ordersToday} order</span>
+                          <span class="text-[11px] text-on-surface-variant">(${rep.effectiveCallRate}%)</span>
+                        </td>
+                        <td class="px-3 py-2.5 text-right font-mono">
+                          <div class="font-semibold text-on-surface">${window.ArbaUtils.formatRupiah(rep.revenueMonth)}</div>
+                          <div class="text-[10px] text-on-surface-variant">Target: ${window.ArbaUtils.formatRupiah(rep.monthlyRevenueTarget)}</div>
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
+                          <span class="px-2 py-0.5 rounded-full font-bold text-[11px] ${badgeColor}">
+                            ${rep.revenuePct}%
+                          </span>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Panel Kanan (5 Kolom): Analitik Perputaran Stok Produk (Inventory Turnover & Days of Cover) -->
+          <div class="lg:col-span-5 bg-surface-container-lowest p-space-lg rounded-xl shadow-xs border border-border-subtle/40 flex flex-col justify-between gap-3">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">
+                    Analitik Inventaris &amp; ROP
+                  </span>
+                  <h2 class="font-title-sm text-title-sm text-on-surface font-bold">
+                    Perputaran Stok &amp; Ketahanan Hari (Days of Cover)
+                  </h2>
+                </div>
+              </div>
+
+              <div class="space-y-2.5">
+                ${analytics.stockTurnover.map(function (st) {
+                  var isCritical = st.belowRop;
+                  var barWidth = Math.min(100, Math.round((st.daysOfCover / 60) * 100));
+                  return `
+                    <div class="p-2.5 rounded-lg bg-surface-container-low/60 border border-border-subtle/40">
+                      <div class="flex items-center justify-between text-xs mb-1">
+                        <span class="font-semibold text-on-surface truncate max-w-[200px]">${st.name}</span>
+                        <span class="font-mono font-bold ${isCritical ? 'text-rose-600' : 'text-primary'}">
+                          ${st.stock} unit · ~${st.daysOfCover} hari
+                        </span>
+                      </div>
+                      <div class="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden mb-1">
+                        <div class="${isCritical ? 'bg-rose-600' : 'bg-primary'} h-full rounded-full" style="width:${barWidth}%;"></div>
+                      </div>
+                      <div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+                        <span>Demand: ${st.dailyDemand} unit/hari (ROP: ${st.rop})</span>
+                        <span>ITR: <b>${st.turnoverRatio}x/bln</b></span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
               </div>
             </div>
           </div>

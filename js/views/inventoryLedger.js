@@ -126,6 +126,16 @@
               </button>
 
               <button
+                id="btn-import-ledger-csv"
+                class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-low hover:bg-surface-container text-primary text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border border-border-subtle/50"
+                type="button"
+                title="Migrasi / Impor Master SKU & Saldo Stok Awal dari CSV"
+              >
+                <span class="material-symbols-outlined text-[15px]">upload_file</span>
+                <span>Impor CSV</span>
+              </button>
+
+              <button
                 id="btn-export-ledger-csv"
                 class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-low hover:bg-surface-container text-on-surface text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border border-border-subtle/50"
                 type="button"
@@ -748,6 +758,14 @@
       });
     }
 
+    // Import Products / Initial Stock CSV
+    var btnImportCsv = container.querySelector('#btn-import-ledger-csv');
+    if (btnImportCsv) {
+      btnImportCsv.addEventListener('click', function () {
+        openImportProductsModal();
+      });
+    }
+
     // Export Ledger CSV
     var btnCsv = container.querySelector('#btn-export-ledger-csv');
     if (btnCsv) {
@@ -819,6 +837,103 @@
         renderInventoryLedger(container);
       });
     });
+  }
+
+  // Modal 0: Migrasi / Impor Master Produk & Saldo Stok Awal (CSV)
+  function openImportProductsModal() {
+    var sampleCsv = [
+      'sku,nama_produk,kategori,stok,safety_stock,rop,harga_satuan,batch_aktif,tanggal_ed',
+      'SKU-ARB-KLM250,Madu Klanceng Asli Lawu 250g,Madu Herbal,260,60,110,92000,BATCH-2026-051,22 Nov 2027',
+      'SKU-ARB-SRB100,Serbuk Jahe Merah Instan 100g,Serbuk,380,80,145,35000,BATCH-2026-060,10 Des 2027'
+    ].join('\n');
+
+    var modalHtml = `
+      <div class="modal-dialog max-w-2xl">
+        <div class="modal-header">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <span class="material-symbols-outlined text-[20px]">upload_file</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-on-surface">Migrasi Master SKU &amp; Saldo Stok Awal (.CSV)</h3>
+              <p class="text-[11px] text-on-surface-variant">Setiap SKU yang diimpor otomatis tercatat ke Buku Besar Stok (SALDO-AWAL / MIGRASI-CSV)</p>
+            </div>
+          </div>
+          <button class="icon-btn" onclick="window.ArbaApp.closeModal()">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+
+        <div class="modal-body text-xs space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-surface-container-low p-3 rounded-lg border border-border-subtle/50">
+            <div class="text-on-surface-variant">
+              Format Kolom: <code class="font-mono text-primary font-semibold">sku, nama_produk, kategori, stok, safety_stock, rop, harga_satuan, batch_aktif, tanggal_ed</code>
+            </div>
+            <button type="button" id="btn-download-prod-template" class="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold cursor-pointer border border-border-subtle/50 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[15px]">download</span>
+              <span>Unduh Template CSV</span>
+            </button>
+          </div>
+
+          <div class="space-y-1">
+            <label class="font-semibold text-on-surface block">Pilih Berkas CSV dari Komputer (.csv):</label>
+            <input type="file" id="input-prod-csv-file" accept=".csv,text/csv" class="w-full p-2 rounded-lg border border-border-subtle bg-surface text-xs" />
+          </div>
+
+          <div class="space-y-1">
+            <label class="font-semibold text-on-surface block">Atau Tempel / Edit Baris CSV Secara Langsung:</label>
+            <textarea id="textarea-prod-csv" rows="5" class="w-full p-2.5 rounded-lg border border-border-subtle bg-surface font-mono text-[11px] text-on-surface">${sampleCsv}</textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button type="button" class="px-3.5 py-2 rounded-lg bg-surface-container text-on-surface font-semibold cursor-pointer border-0" onclick="window.ArbaApp.closeModal()">
+              Batal
+            </button>
+            <button type="button" id="btn-exec-prod-import" class="px-4 py-2 rounded-lg bg-primary text-white font-semibold cursor-pointer border-0 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">cloud_upload</span>
+              <span>Proses Migrasi Stok</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    window.ArbaApp.openModal(modalHtml);
+
+    setTimeout(function () {
+      var btnDl = document.getElementById('btn-download-prod-template');
+      var fileInput = document.getElementById('input-prod-csv-file');
+      var txtArea = document.getElementById('textarea-prod-csv');
+      var btnExec = document.getElementById('btn-exec-prod-import');
+
+      if (btnDl) {
+        btnDl.onclick = function () {
+          window.ArbaUtils.downloadCsv('Template_Migrasi_Stok_Produk_ArbaConnect.csv', sampleCsv);
+        };
+      }
+      if (fileInput && txtArea) {
+        fileInput.onchange = function (e) {
+          var f = e.target.files && e.target.files[0];
+          if (!f) return;
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            txtArea.value = String(ev.target.result || '');
+          };
+          reader.readAsText(f);
+        };
+      }
+      if (btnExec && txtArea) {
+        btnExec.onclick = function () {
+          var rows = window.ArbaUtils.parseCsv(txtArea.value);
+          if (!rows.length) {
+            window.ArbaApp.showToast('Format CSV kosong atau tidak valid', 'warning');
+            return;
+          }
+          window.ArbaStore.importProducts(rows);
+          window.ArbaApp.closeModal();
+        };
+      }
+    }, 30);
   }
 
   // Modal 1: Penerimaan Batch Masuk

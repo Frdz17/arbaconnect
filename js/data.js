@@ -814,6 +814,64 @@ window.ArbaData = (function() {
     }
   ];
 
+  // ---------------------------------------------------------------------------
+  // Tim Sales Lapangan & Target Capaian (entitas `sales_targets`)
+  // monthlyRevenueBase / monthlyVisitBase = realisasi historis bulan berjalan
+  // SEBELUM transaksi live di aplikasi ini (hasil migrasi data awal).
+  // ---------------------------------------------------------------------------
+  const salesTeam = [
+    { id: 'REP-SR-04',  name: 'Budi Santoso',    area: 'Solo Tengah & Laweyan', dailyVisitTarget: 7, monthlyRevenueTarget: 95000000, monthlyRevenueBase: 71200000, monthlyVisitBase: 118 },
+    { id: 'REP-SKH-02', name: 'Anita Rahmawati', area: 'Jebres & Sukoharjo',    dailyVisitTarget: 6, monthlyRevenueTarget: 70000000, monthlyRevenueBase: 58400000, monthlyVisitBase: 104 },
+    { id: 'REP-SKH-05', name: 'Tri Wahyuni',     area: 'Sukoharjo & Solo Baru', dailyVisitTarget: 6, monthlyRevenueTarget: 60000000, monthlyRevenueBase: 49750000, monthlyVisitBase: 97 },
+    { id: 'REP-KRA-03', name: 'Agus Hermawan',   area: 'Karanganyar Kota',      dailyVisitTarget: 6, monthlyRevenueTarget: 60000000, monthlyRevenueBase: 38900000, monthlyVisitBase: 81 },
+    { id: 'REP-KRA-01', name: 'Hadi Kurniawan',  area: 'Palur & Karanganyar',   dailyVisitTarget: 5, monthlyRevenueTarget: 50000000, monthlyRevenueBase: 41300000, monthlyVisitBase: 88 },
+    { id: 'REP-KLT-01', name: 'Rian Pratama',    area: 'Klaten & Sragen',       dailyVisitTarget: 5, monthlyRevenueTarget: 55000000, monthlyRevenueBase: 46100000, monthlyVisitBase: 86 },
+    { id: 'REP-BYL-03', name: 'Rahmat Adi',      area: 'Boyolali',              dailyVisitTarget: 5, monthlyRevenueTarget: 50000000, monthlyRevenueBase: 39600000, monthlyVisitBase: 79 },
+    { id: 'REP-KRA-02', name: 'Bambang S.',      area: 'Karanganyar Timur',     dailyVisitTarget: 5, monthlyRevenueTarget: 45000000, monthlyRevenueBase: 35800000, monthlyVisitBase: 74 }
+  ];
+
+  // ---------------------------------------------------------------------------
+  // Log Kunjungan Lapangan (entitas `visits`) — check-in GPS + hasil kunjungan.
+  // outcome: ORDER | NO_ORDER_STOCK_FULL | COLLECTION | FOLLOW_UP | PIC_ABSENT
+  // Seed dibuat relatif terhadap hari ini agar KPI "kunjungan hari ini" hidup.
+  // ---------------------------------------------------------------------------
+  const visitLogs = (function () {
+    const plan = [
+      ['Budi Santoso', 5], ['Anita Rahmawati', 5], ['Tri Wahyuni', 4], ['Agus Hermawan', 3],
+      ['Hadi Kurniawan', 4], ['Rian Pratama', 4], ['Rahmat Adi', 3], ['Bambang S.', 4]
+    ];
+    const outcomes = ['ORDER', 'ORDER', 'NO_ORDER_STOCK_FULL', 'ORDER', 'COLLECTION', 'FOLLOW_UP', 'ORDER', 'PIC_ABSENT'];
+    const logs = [];
+    const dayStart = new Date();
+    dayStart.setHours(0, 1, 0, 0);
+    const total = plan.reduce(function (s, p) { return s + p[1]; }, 0);
+    let n = 0;
+    plan.forEach(function (p) {
+      for (let i = 0; i < p[1]; i++) {
+        const outlet = outlets[(n * 3 + i) % outlets.length];
+        logs.push({
+          id: 'VLOG-' + String(1000 + n),
+          salesRep: p[0],
+          outletId: outlet.id,
+          outletName: outlet.name,
+          timestamp: Math.max(dayStart.getTime() + n * 1000, Date.now() - (total - n) * 8 * 60 * 1000),
+          outcome: outcomes[n % outcomes.length],
+          gpsDistance: 6 + (n * 5) % 15,
+          notes: 'Kunjungan rutin terjadwal',
+          orderId: null
+        });
+        n++;
+      }
+    });
+    return logs;
+  })();
+
+  // Baseline historis jumlah outlet di luar 11 outlet sampel (hasil migrasi awal)
+  const baseline = {
+    extraApotek: 92 - outlets.filter(function (o) { return o.type !== 'Minimarket'; }).length,
+    extraMinimarket: 56 - outlets.filter(function (o) { return o.type === 'Minimarket'; }).length
+  };
+
   return {
     products,
     ledger,
@@ -821,6 +879,9 @@ window.ArbaData = (function() {
     orders,
     supplierPOs,
     salesVisits,
-    driverManifests
+    driverManifests,
+    salesTeam,
+    visitLogs,
+    baseline
   };
 })();

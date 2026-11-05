@@ -58,6 +58,22 @@
 
     var currentOutlet = outlets.find(function (o) { return o.code === state.selectedOutletCode; }) || outlets[0];
 
+    // Sales rep aktif & progres harian (dihitung live dari log kunjungan)
+    var salesTeam = appState.salesTeam || [];
+    var currentRep = appState.currentSalesRep || 'Budi Santoso';
+    var repInitials = currentRep.split(' ').map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+    var analytics = window.ArbaStore.getAnalytics();
+    var repPerf = analytics.salesPerformance.find(function (s) { return s.name === currentRep; }) ||
+      { visitsToday: 0, dailyVisitTarget: 0, ordersToday: 0, revenuePct: 0 };
+
+    // GPS check-in berlaku per outlet
+    var isCheckedInHere = state.gpsCheckedIn && state.gpsOutletCode === currentOutlet.code;
+
+    // Riwayat order terakhir outlet (untuk fitur Repeat Order 1-tap)
+    var lastOutletOrder = appState.orders.find(function (o) {
+      return (o.outletId === currentOutlet.code || o.outletId === currentOutlet.id) && o.status !== 'REJECTED';
+    });
+
     // Filter products
     var filteredProducts = products.filter(function (prod) {
       var matchesCategory =
@@ -84,6 +100,10 @@
       var qty = state.cart[sku] || 0;
       return sum + (prod ? prod.unitPrice * qty : 0);
     }, 0);
+
+    // Validasi plafon kredit outlet (termin non-COD)
+    var isCreditTerm = !/COD|Tunai/i.test(state.selectedTerm);
+    var overCredit = isCreditTerm && totalAmount > (currentOutlet.creditRemaining || 0);
 
     var html = `
       <div class="flex flex-col items-center w-full pb-12">
@@ -135,10 +155,19 @@
             <div class="bg-[#005c55] text-white px-4 py-3 sticky top-0 z-30 shadow-xs flex items-center justify-between" style="background:#005c55; color:#fff;">
               <div class="flex items-center gap-2.5">
                 <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white" style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center;">
-                  BS
+                  ${repInitials}
                 </div>
                 <div class="flex flex-col">
-                  <span class="font-bold text-xs leading-tight">Budi Santoso</span>
+                  <select
+                    id="pwa-rep-select"
+                    aria-label="Pilih akun sales"
+                    class="font-bold text-xs leading-tight cursor-pointer border-0"
+                    style="background:transparent; color:#fff; padding:0; max-width:150px;"
+                  >
+                    ${salesTeam.map(function (s) {
+                      return `<option value="${s.name}" style="color:#0f172a;" ${s.name === currentRep ? 'selected' : ''}>${s.name}</option>`;
+                    }).join('')}
+                  </select>
                   <span class="text-[11px] text-teal-100 font-medium">Sales Rep · Solo Raya</span>
                 </div>
               </div>
@@ -168,6 +197,16 @@
               </button>
             </div>
 
+            <!-- Daily Target Progress Strip (live dari log kunjungan) -->
+            <div class="px-4 py-2 flex items-center justify-between text-[11px]" style="background:#e6f4f2; color:#004d47; padding:0.45rem 1rem; border-bottom:1px solid #cce7e3;">
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">directions_walk</span>
+                Kunjungan hari ini: <b>${repPerf.visitsToday}/${repPerf.dailyVisitTarget}</b>
+              </span>
+              <span>Order: <b>${repPerf.ordersToday}</b></span>
+              <span>Omset: <b>${repPerf.revenuePct}%</b> target</span>
+            </div>
+
             <!-- Main App Body -->
             <div class="flex-1 p-3.5 space-y-3 pb-24 overflow-y-auto" style="padding: 0.875rem; padding-bottom: 6rem; overflow-y:auto; max-height:580px;">
               <!-- Step 1: Outdoor GPS Check-In & Outlet Card -->
@@ -181,16 +220,16 @@
                     type="button"
                     id="btn-gps-checkin"
                     class="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold cursor-pointer transition-colors border-0 ${
-                      state.gpsCheckedIn
+                      isCheckedInHere
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-amber-100 text-amber-900'
                     }"
-                    style="background:${state.gpsCheckedIn ? '#d1fae5' : '#fef3c7'}; color:${state.gpsCheckedIn ? '#065f46' : '#92400e'};"
+                    style="background:${isCheckedInHere ? '#d1fae5' : '#fef3c7'}; color:${isCheckedInHere ? '#065f46' : '#92400e'};"
                   >
                     <span class="material-symbols-outlined text-[14px]">
-                      ${state.gpsCheckedIn ? 'pin_drop' : 'location_searching'}
+                      ${isCheckedInHere ? 'pin_drop' : 'location_searching'}
                     </span>
-                    <span>${state.gpsCheckedIn ? `GPS Valid (${state.gpsDistance}m)` : 'Check-in Lokasi'}</span>
+                    <span>${isCheckedInHere ? `GPS Valid (${state.gpsDistance}m)` : 'Check-in Lokasi'}</span>
                   </button>
                 </div>
 
@@ -223,6 +262,30 @@
                       ${window.ArbaUtils.formatRupiah(currentOutlet.creditRemaining)}
                     </span>
                   </div>
+                </div>
+
+                <!-- Quick Actions: Repeat Order & Visit-only (canvassing) -->
+                <div class="flex gap-2" style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                  <button
+                    type="button"
+                    id="btn-pwa-repeat-order"
+                    class="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-semibold cursor-pointer border-0"
+                    style="flex:1; background:#e0f2fe; color:#075985; border-radius:8px; padding:0.5rem;"
+                    ${lastOutletOrder ? '' : 'disabled'}
+                    title="${lastOutletOrder ? 'Isi keranjang dengan pesanan terakhir outlet ini' : 'Belum ada riwayat order outlet ini'}"
+                  >
+                    <span class="material-symbols-outlined text-[15px]">replay</span>
+                    <span>Ulangi Order Terakhir</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-pwa-visit-only"
+                    class="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-semibold cursor-pointer border-0"
+                    style="flex:1; background:#f1f5f9; color:#334155; border-radius:8px; padding:0.5rem;"
+                  >
+                    <span class="material-symbols-outlined text-[15px]">where_to_vote</span>
+                    <span>Kunjungan Tanpa Order</span>
+                  </button>
                 </div>
               </div>
 
@@ -283,6 +346,7 @@
                   ${filteredProducts.map(function (prod) {
                     var qty = state.cart[prod.sku] || 0;
                     var isLow = prod.stock <= prod.rop;
+                    var atMax = qty >= prod.stock;
 
                     return `
                       <div
@@ -304,11 +368,17 @@
                             <span>·</span>
                             <span class="font-mono text-slate-500">Stok: ${prod.stock}</span>
                           </div>
-                          ${isLow ? `
-                            <div class="text-[10px] text-amber-700 font-medium mt-0.5">
-                              Mendekati ROP Gudang
+                          ${prod.stock === 0 ? `
+                            <div class="text-[10px] font-semibold mt-0.5" style="color:#be123c;">
+                              Stok gudang habis — tidak dapat dipesan
                             </div>
-                          ` : ''}
+                          ` : isLow ? `
+                            <div class="text-[10px] text-amber-700 font-medium mt-0.5">
+                              Mendekati ROP Gudang${atMax && qty > 0 ? ' · batas stok tercapai' : ''}
+                            </div>
+                          ` : (atMax && qty > 0 ? `
+                            <div class="text-[10px] text-amber-700 font-medium mt-0.5">Batas stok gudang tercapai</div>
+                          ` : '')}
                         </div>
 
                         <!-- Touch-Friendly Steppers (>= 44px hit area) -->
@@ -330,6 +400,7 @@
                             class="btn-stepper-plus w-10 h-10 rounded-md bg-[#005c55] text-white flex items-center justify-center font-bold text-base shadow-2xs hover:bg-teal-800 active:scale-95 cursor-pointer border-0"
                             style="width:36px; height:36px; background:#005c55; color:#fff; border-radius:6px; cursor:pointer;"
                             data-sku="${prod.sku}"
+                            ${atMax ? 'disabled' : ''}
                           >
                             +
                           </button>
@@ -371,9 +442,12 @@
                 <span class="text-[10px] text-slate-500 uppercase tracking-wider block font-medium">
                   Total ${totalQuantity} Item
                 </span>
-                <span class="font-bold text-sm text-[#005c55]" style="color:#005c55;">
+                <span class="font-bold text-sm text-[#005c55]" style="color:${overCredit ? '#be123c' : '#005c55'};">
                   ${window.ArbaUtils.formatRupiah(totalAmount)}
                 </span>
+                ${overCredit ? `
+                  <span class="text-[10px] font-semibold block" style="color:#be123c;">Melebihi sisa plafon</span>
+                ` : ''}
               </div>
 
               <button
@@ -393,10 +467,50 @@
     `;
 
     container.innerHTML = html;
-    bindEvents(container, currentOutlet, products, totalAmount);
+    bindEvents(container, currentOutlet, products, totalAmount, {
+      overCredit: overCredit,
+      isCheckedInHere: isCheckedInHere,
+      lastOutletOrder: lastOutletOrder,
+      currentRep: currentRep
+    });
   }
 
-  function bindEvents(container, currentOutlet, products, totalAmount) {
+  function bindEvents(container, currentOutlet, products, totalAmount, ctx) {
+    ctx = ctx || {};
+
+    // Sales rep account switch
+    var repSelect = container.querySelector('#pwa-rep-select');
+    if (repSelect) {
+      repSelect.addEventListener('change', function (e) {
+        state.gpsCheckedIn = false;
+        window.ArbaStore.setCurrentSalesRep(e.target.value);
+        window.ArbaApp.showToast('Masuk sebagai ' + e.target.value, 'badge');
+      });
+    }
+
+    // Repeat last order (1-tap)
+    var btnRepeat = container.querySelector('#btn-pwa-repeat-order');
+    if (btnRepeat && ctx.lastOutletOrder) {
+      btnRepeat.addEventListener('click', function () {
+        var newCart = {};
+        ctx.lastOutletOrder.items.forEach(function (it) {
+          var norm = String(it.sku).toUpperCase().replace(/SKU-|ARB-|-/g, '');
+          var prod = products.find(function (p) { return p.sku.toUpperCase().replace(/SKU-|ARB-|-/g, '') === norm; });
+          if (prod && prod.stock > 0) newCart[prod.sku] = Math.min(it.quantity, prod.stock);
+        });
+        state.cart = newCart;
+        window.ArbaApp.showToast('Keranjang diisi dari order terakhir ' + currentOutlet.name, 'replay');
+        renderFieldSalesPwa(container);
+      });
+    }
+
+    // Visit-only (canvassing) log
+    var btnVisitOnly = container.querySelector('#btn-pwa-visit-only');
+    if (btnVisitOnly) {
+      btnVisitOnly.addEventListener('click', function () {
+        openVisitOnlyModal(currentOutlet, ctx.currentRep, ctx.isCheckedInHere);
+      });
+    }
     // Viewport Toggle
     var btnPhone = container.querySelector('#btn-viewport-phone');
     var btnFull = container.querySelector('#btn-viewport-full');
@@ -430,6 +544,7 @@
         var now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         state.gpsDistance = dist;
         state.gpsCheckedIn = true;
+        state.gpsOutletCode = currentOutlet.code;
         state.checkinTime = now + ' WIB';
         window.ArbaApp.showToast(`GPS Check-in: ${dist}m dari ${currentOutlet.name} (${now} WIB)`, 'pin_drop');
         renderFieldSalesPwa(container);
@@ -488,7 +603,13 @@
     plusBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
         var sku = btn.getAttribute('data-sku');
-        state.cart[sku] = (state.cart[sku] || 0) + 1;
+        var prodPlus = products.find(function (p) { return p.sku === sku; });
+        var next = (state.cart[sku] || 0) + 1;
+        if (prodPlus && next > prodPlus.stock) {
+          window.ArbaApp.showToast('Stok gudang ' + prodPlus.name + ' hanya tersisa ' + prodPlus.stock + ' unit', 'inventory_2');
+          return;
+        }
+        state.cart[sku] = next;
         renderFieldSalesPwa(container);
       });
     });
@@ -498,6 +619,7 @@
     if (termSelect) {
       termSelect.addEventListener('change', function (e) {
         state.selectedTerm = e.target.value;
+        renderFieldSalesPwa(container);
       });
     }
 
@@ -540,23 +662,122 @@
         });
 
         setTimeout(function () {
+          var activeRep = window.ArbaStore.getState().currentSalesRep || 'Budi Santoso';
           window.ArbaStore.submitFieldSalesOrder({
             outletId: currentOutlet.code,
             outletName: currentOutlet.name,
             address: currentOutlet.address,
             city: currentOutlet.cityName,
-            salesRep: 'Budi Santoso',
-            salesRepId: 'REP-SR-04',
+            salesRep: activeRep,
             terms: state.selectedTerm,
             totalAmount: totalAmount,
+            gpsDistance: state.gpsDistance,
+            geofenceValid: Boolean(ctx.isCheckedInHere),
+            notes: state.orderNotes,
             items: items
           });
 
           state.isSubmitting = false;
+          state.orderNotes = '';
           openThermalReceiptModal(currentOutlet, items, totalAmount);
-        }, 500);
+        }, 400);
       });
     }
+  }
+
+  // Modal Pencatatan Kunjungan Tanpa Order (Canvassing / Visit-Only Log)
+  function openVisitOnlyModal(outlet, salesRep, isCheckedIn) {
+    var labels = window.ArbaStore.visitOutcomeLabels || {
+      NO_ORDER_STOCK_FULL: 'Stok Outlet Masih Penuh',
+      COLLECTION: 'Penagihan Faktur Jatuh Tempo',
+      FOLLOW_UP: 'Follow-up Minggu Depan',
+      PIC_ABSENT: 'PIC/Apoteker Sedang Tidak di Tempat',
+      DISPLAY_CHECK: 'Cek Display & Merchandising'
+    };
+
+    var optionsHtml = Object.keys(labels)
+      .filter(function (k) { return k !== 'ORDER'; })
+      .map(function (k) {
+        return `<option value="${k}">${labels[k]}</option>`;
+      })
+      .join('');
+
+    var modalHtml = `
+      <div class="modal-dialog max-w-md" style="max-width:420px;">
+        <div class="modal-header">
+          <div class="flex items-center gap-2 text-on-surface">
+            <span class="material-symbols-outlined text-primary text-[20px]">where_to_vote</span>
+            <h3 class="font-bold text-sm">Catat Kunjungan Tanpa Order (Canvassing)</h3>
+          </div>
+          <button class="icon-btn" onclick="window.ArbaApp.closeModal()">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+
+        <div class="modal-body text-xs space-y-3">
+          <div class="bg-surface-container-low p-3 rounded-lg border border-border-subtle/60 space-y-1">
+            <div class="font-semibold text-on-surface">${outlet.name} (${outlet.cityName})</div>
+            <div class="text-on-surface-variant">Sales Rep: <b>${salesRep}</b> · GPS: <b>${isCheckedIn ? state.gpsDistance + 'm (Terverifikasi)' : 'Check-in Otomatis'}</b></div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="font-semibold text-on-surface block">Hasil Kunjungan Lapangan</label>
+            <select id="visit-only-outcome" class="w-full p-2.5 rounded-lg border border-border-subtle bg-surface text-on-surface text-xs font-medium">
+              ${optionsHtml}
+            </select>
+          </div>
+
+          <div class="space-y-1">
+            <label class="font-semibold text-on-surface block">Catatan Kunjungan / Temuan Rak &amp; Faktur</label>
+            <textarea
+              id="visit-only-notes"
+              rows="3"
+              placeholder="Contoh: Stok Madu Randu di etalase masih 18 botol, jadwal repeat order 5 hari lagi..."
+              class="w-full p-2.5 rounded-lg border border-border-subtle bg-surface text-on-surface text-xs"
+            ></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="px-3.5 py-2 rounded-lg bg-surface-container text-on-surface text-xs font-semibold cursor-pointer border-0" onclick="window.ArbaApp.closeModal()">
+              Batal
+            </button>
+            <button type="button" id="btn-save-visit-only" class="px-4 py-2 rounded-lg bg-primary text-white text-xs font-semibold cursor-pointer border-0 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[15px]">check</span>
+              <span>Simpan Log Kunjungan</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    window.ArbaApp.openModal(modalHtml);
+
+    setTimeout(function () {
+      var btnSave = document.getElementById('btn-save-visit-only');
+      if (btnSave) {
+        btnSave.onclick = function () {
+          var outcomeEl = document.getElementById('visit-only-outcome');
+          var notesEl = document.getElementById('visit-only-notes');
+          var dist = isCheckedIn ? state.gpsDistance : Math.floor(8 + Math.random() * 12);
+          state.gpsCheckedIn = true;
+          state.gpsOutletCode = outlet.code;
+          state.gpsDistance = dist;
+
+          window.ArbaStore.logFieldVisit({
+            salesRep: salesRep,
+            outletId: outlet.code,
+            outletName: outlet.name,
+            outcome: outcomeEl ? outcomeEl.value : 'NO_ORDER_STOCK_FULL',
+            gpsDistance: dist,
+            notes: notesEl ? notesEl.value.trim() : ''
+          });
+
+          window.ArbaApp.closeModal();
+          var mainContainer = document.getElementById('main-view-container');
+          if (mainContainer) renderFieldSalesPwa(mainContainer);
+        };
+      }
+    }, 30);
   }
 
   // 58mm Mobile Thermal Receipt Modal

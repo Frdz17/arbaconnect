@@ -76,6 +76,15 @@
           </div>
           <div class="flex items-center gap-2.5 flex-wrap">
             <button
+              id="btn-import-crm-csv"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-low text-primary hover:bg-surface-container text-xs font-semibold transition-colors border border-border-subtle/50 cursor-pointer"
+              type="button"
+              title="Impor / Migrasi Data Awal Pelanggan B2B dari CSV"
+            >
+              <span class="material-symbols-outlined text-[16px]">upload_file</span>
+              <span>Migrasi / Impor CSV</span>
+            </button>
+            <button
               id="btn-export-crm-csv"
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container text-xs font-semibold transition-colors border border-border-subtle/50 cursor-pointer"
               type="button"
@@ -719,6 +728,14 @@
   }
 
   function bindEvents(container, selectedOutlet) {
+    // Import / Migrasi CRM CSV
+    var btnImportCsv = container.querySelector('#btn-import-crm-csv');
+    if (btnImportCsv) {
+      btnImportCsv.addEventListener('click', function () {
+        openImportOutletsModal();
+      });
+    }
+
     // Export CRM CSV
     var btnCsv = container.querySelector('#btn-export-crm-csv');
     if (btnCsv) {
@@ -849,6 +866,115 @@
         });
       }
     }
+  }
+
+  // Modal 0: Migrasi / Impor Data Awal Outlet B2B (CSV)
+  function openImportOutletsModal() {
+    var sampleCsv = [
+      'kode_outlet,nama_outlet,tipe,kota,alamat,nama_pic,telepon_pic,sales_rep,termin,limit_kredit,omset_ytd',
+      'AP-SLO-190,Apotek Muhamadiyah Pabelan UMS,Apotek Mandiri,Solo,"Jl. Ahmad Yani No. 157, Pabelan",apt. Siti Aminah S.Farm,6281329001122,Budi Santoso,Net 30 Hari,12000000,18500000',
+      'MM-SKH-191,Swalayan Assalaam Hypermarket,Minimarket,Sukoharjo,"Jl. Ahmad Yani KM 6, Kartasura",H. Agus Santoso,6281228003344,Anita Rahmawati,Net 14 Hari,25000000,42000000',
+      'AP-KLT-192,Apotek Sehat Delanggu,Apotek Mandiri,Klaten,"Jl. Raya Solo-Jogja KM 22, Delanggu",apt. Wahyu Nugroho S.Farm,6285725009988,Rian Pratama,Net 30 Hari,10000000,14200000'
+    ].join('\n');
+
+    var modalHtml = `
+      <div class="modal-dialog max-w-2xl">
+        <div class="modal-header">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <span class="material-symbols-outlined text-[20px]">upload_file</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-on-surface">Skema Migrasi &amp; Impor Data Awal Pelanggan B2B (.CSV)</h3>
+              <p class="text-[11px] text-on-surface-variant">Unggah berkas CSV dari Excel lama CV Arba'in atau gunakan template standar</p>
+            </div>
+          </div>
+          <button class="icon-btn" onclick="window.ArbaApp.closeModal()">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+
+        <div class="modal-body text-xs space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-surface-container-low p-3 rounded-lg border border-border-subtle/50">
+            <div class="text-on-surface-variant">
+              Format Kolom: <code class="font-mono text-primary font-semibold">kode_outlet, nama_outlet, tipe, kota, alamat, nama_pic, telepon_pic, sales_rep, termin, limit_kredit</code>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" id="btn-download-outlet-template" class="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold cursor-pointer border border-border-subtle/50 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px]">download</span>
+                <span>Unduh Template CSV</span>
+              </button>
+              <button type="button" id="btn-load-outlet-sample" class="px-3 py-1.5 rounded-lg bg-primary/10 text-primary font-semibold cursor-pointer border-0">
+                Isi Contoh Data Mitra
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="font-semibold text-on-surface block">Pilih Berkas CSV dari Komputer (.csv):</label>
+            <input type="file" id="input-outlet-csv-file" accept=".csv,text/csv" class="w-full p-2 rounded-lg border border-border-subtle bg-surface text-xs" />
+          </div>
+
+          <div class="space-y-1">
+            <label class="font-semibold text-on-surface block">Atau Tempel / Edit Baris CSV Secara Langsung:</label>
+            <textarea id="textarea-outlet-csv" rows="6" class="w-full p-2.5 rounded-lg border border-border-subtle bg-surface font-mono text-[11px] text-on-surface">${sampleCsv}</textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button type="button" class="px-3.5 py-2 rounded-lg bg-surface-container text-on-surface font-semibold cursor-pointer border-0" onclick="window.ArbaApp.closeModal()">
+              Batal
+            </button>
+            <button type="button" id="btn-exec-outlet-import" class="px-4 py-2 rounded-lg bg-primary text-white font-semibold cursor-pointer border-0 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">cloud_upload</span>
+              <span>Proses Migrasi Data Outlet</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    window.ArbaApp.openModal(modalHtml);
+
+    setTimeout(function () {
+      var btnDl = document.getElementById('btn-download-outlet-template');
+      var btnSample = document.getElementById('btn-load-outlet-sample');
+      var fileInput = document.getElementById('input-outlet-csv-file');
+      var txtArea = document.getElementById('textarea-outlet-csv');
+      var btnExec = document.getElementById('btn-exec-outlet-import');
+
+      if (btnDl) {
+        btnDl.onclick = function () {
+          window.ArbaUtils.downloadCsv('Template_Migrasi_Outlet_B2B_ArbaConnect.csv', sampleCsv);
+        };
+      }
+      if (btnSample && txtArea) {
+        btnSample.onclick = function () {
+          txtArea.value = sampleCsv;
+        };
+      }
+      if (fileInput && txtArea) {
+        fileInput.onchange = function (e) {
+          var f = e.target.files && e.target.files[0];
+          if (!f) return;
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            txtArea.value = String(ev.target.result || '');
+          };
+          reader.readAsText(f);
+        };
+      }
+      if (btnExec && txtArea) {
+        btnExec.onclick = function () {
+          var rows = window.ArbaUtils.parseCsv(txtArea.value);
+          if (!rows.length) {
+            window.ArbaApp.showToast('Format CSV kosong atau tidak valid', 'warning');
+            return;
+          }
+          window.ArbaStore.importOutlets(rows);
+          window.ArbaApp.closeModal();
+        };
+      }
+    }, 30);
   }
 
   // Modal 1: Register Outlet Baru
