@@ -9,7 +9,7 @@
   --color-primary-fixed-dim: #80d5cb;
 
   /* Secondary Logistics Palette (Corporate Sky Blue) */
-  --color-secondary: #006398;
+  --color-secondary: #0284c7;
   --color-secondary-container: #5bb8fe;
   --color-secondary-fixed: #cce5ff;
   --color-secondary-fixed-dim: #93ccff;
@@ -25,19 +25,19 @@
   --color-on-tertiary-container: #84ffec;
 
   /* Surface & Background System (Light Mode) */
-  --color-surface: #f8f9ff;
-  --color-surface-bright: #f8f9ff;
-  --color-surface-dim: #cbdbf5;
+  --color-surface: #f8fafc;
+  --color-surface-bright: #ffffff;
+  --color-surface-dim: #e2e8f0;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #eff4ff;
-  --color-surface-container: #e5eeff;
-  --color-surface-container-high: #dce9ff;
-  --color-surface-container-highest: #d3e4fe;
+  --color-surface-container-low: #f1f5f9;
+  --color-surface-container: #e2e8f0;
+  --color-surface-container-high: #cbd5e1;
+  --color-surface-container-highest: #94a3b8;
   --color-surface-card: #ffffff;
 
   /* Text & Border Colors */
-  --color-on-surface: #0b1c30;
-  --color-on-surface-variant: #3e4947;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #475569;
   --color-border-subtle: #e2e8f0;
   --color-border-subtle-trans: rgba(226, 232, 240, 0.6);
 
@@ -55,9 +55,19 @@
   --color-badge-red: #ef4444;
 
   /* Typography Scales */
-  --font-headline: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-headline: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "Inter", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Business-specific alarm semantics */
+  --color-alarm-orange: #f97316;
+  --color-alarm-orange-soft: #fff7ed;
+  --color-alarm-orange-ink: #9a3412;
+  --color-alarm-pink: #ec4899;
+  --color-alarm-pink-soft: #fdf2f8;
+  --color-alarm-pink-ink: #9d174d;
+  --color-danger: #e11d48;
+  --color-success: #059669;
 
   /* Spacings */
   --spacing-xs: 0.25rem;
@@ -94,7 +104,7 @@ html.dark {
   --color-primary-fixed: #2dd4bf;
   --color-primary-fixed-dim: #14b8a6;
 
-  --color-secondary: #60a5fa;
+  --color-secondary: #38bdf8;
   --color-secondary-container: #1e40af;
   --color-secondary-fixed: #93c5fd;
   --color-secondary-fixed-dim: #60a5fa;
@@ -107,14 +117,14 @@ html.dark {
   --color-on-tertiary: #042f2e;
   --color-on-tertiary-container: #a7f3d0;
 
-  --color-surface: #0f172a;
-  --color-surface-bright: #1e293b;
-  --color-surface-dim: #090d16;
-  --color-surface-container-lowest: #1e293b;
-  --color-surface-container-low: #182234;
-  --color-surface-container: #263348;
-  --color-surface-container-high: #2f3e56;
-  --color-surface-container-highest: #3b4c68;
+  --color-surface: #020617;
+  --color-surface-bright: #0f172a;
+  --color-surface-dim: #020617;
+  --color-surface-container-lowest: #0f172a;
+  --color-surface-container-low: #111c30;
+  --color-surface-container: #1e293b;
+  --color-surface-container-high: #334155;
+  --color-surface-container-highest: #475569;
   --color-surface-card: #1e293b;
 
   --color-on-surface: #f1f5f9;
@@ -130,9 +140,9 @@ html.dark {
   --color-status-danger-text: #f87171;
 }
 
-/* Base Scaling matching 90% desktop ERP density */
+/* Keep native browser zoom so touch and responsive layouts remain predictable. */
 html {
-  zoom: 0.9;
+  font-size: 14px;
   box-sizing: border-box;
   scroll-behavior: smooth;
 }

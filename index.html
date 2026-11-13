@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ArbaConnect - CV Arba'in Logistics ERP</title>
-    <meta name="description" content="Enterprise distribution logistics, real-time FEFO stock ledger, B2B CRM, and field sales PWA for CV Arba'in Solo Raya." />
-    <meta property="og:title" content="ArbaConnect - CV Arba'in Logistics ERP" />
+    <title>ArbaConnect | Distribusi &amp; Konsinyasi CV Arba'in</title>
+    <meta name="description" content="Control tower distribusi B2B herbal CV Arba'in: konsinyasi outlet, stok FEFO, rekonsiliasi sales, dan forecast produksi." />
+    <meta name="theme-color" content="#005c55" />
+    <meta property="og:title" content="ArbaConnect | Distribusi &amp; Konsinyasi CV Arba'in" />
     <meta property="og:description" content="Enterprise distribution logistics, real-time FEFO stock ledger, B2B CRM, and field sales PWA for CV Arba'in Solo Raya." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -13,12 +14,11 @@
     <!-- Google Fonts & Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 
     <!-- Mobile & PWA Full Display Metadata -->
     <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#005c55" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -28,6 +28,7 @@
     <link rel="stylesheet" href="css/layout.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/utilities.css" />
+    <link rel="stylesheet" href="css/redesign.css" />
     <link rel="stylesheet" href="css/print.css" />
   </head>
   <body>
@@ -99,43 +100,50 @@
           </button>
 
           <!-- Dark Mode Toggle -->
-          <button id="header-dark-btn" class="icon-btn" type="button" title="Ganti Mode Gelap / Terang">
+          <button id="header-dark-btn" class="icon-btn" type="button" aria-label="Ganti mode gelap atau terang" title="Ganti Mode Gelap / Terang">
             <span id="header-dark-icon" class="material-symbols-outlined text-[18px]">dark_mode</span>
           </button>
 
           <!-- Notification Menu -->
           <div style="position: relative;">
-            <button id="header-notif-btn" class="icon-btn" type="button" title="Notifikasi Sistem">
+            <button id="header-notif-btn" class="icon-btn" type="button" aria-label="Buka notifikasi" aria-controls="header-notif-menu" aria-expanded="false" title="Notifikasi Sistem">
               <span class="material-symbols-outlined text-[18px]">notifications</span>
               <span id="header-notif-badge" class="badge-dot hidden"></span>
             </button>
-            <div id="header-notif-menu" class="notification-menu hidden">
+            <div id="header-notif-menu" class="notification-menu hidden" role="region" aria-label="Notifikasi sistem">
               <div class="flex items-center justify-between pb-2 border-b border-border-subtle">
                 <span class="font-semibold text-xs text-on-surface">Notifikasi Sistem</span>
                 <span id="notif-pending-count-label" class="text-xs text-primary font-medium">0 Pesanan Baru</span>
               </div>
-              <div class="flex flex-col gap-1.5 py-1 text-xs">
-                <div id="notif-item-order" class="search-item flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-surface-container-low transition-colors">
-                  <span class="material-symbols-outlined text-primary text-[18px] shrink-0">shopping_bag</span>
-                  <div class="flex flex-col">
+              <div class="notification-list">
+                <button type="button" id="notif-item-order" class="search-item notification-item">
+                  <span class="material-symbols-outlined text-primary" aria-hidden="true">shopping_bag</span>
+                  <span class="notification-item__copy">
                     <span class="font-medium text-on-surface">Pesanan Baru Siap Validasi</span>
-                    <span class="text-[11px] text-on-surface-variant">Klik untuk membuka antrean pesanan</span>
-                  </div>
-                </div>
-                <div id="notif-item-rop" class="search-item flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-surface-container-low transition-colors">
-                  <span class="material-symbols-outlined text-amber-600 text-[18px] shrink-0">warning</span>
-                  <div class="flex flex-col">
-                    <span class="font-medium text-on-surface">Peringatan Reorder Point (ROP)</span>
-                    <span class="text-[11px] text-on-surface-variant">Madu Randu mendekati ambang batas</span>
-                  </div>
-                </div>
-                <div id="notif-item-cdob" class="search-item flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-surface-container-low transition-colors">
-                  <span class="material-symbols-outlined text-emerald-600 text-[18px] shrink-0">verified</span>
-                  <div class="flex flex-col">
+                    <span class="text-on-surface-variant">Klik untuk membuka antrean pesanan</span>
+                  </span>
+                </button>
+                <button type="button" id="notif-item-rop" class="search-item notification-item">
+                  <span class="material-symbols-outlined text-alarm-orange" aria-hidden="true">warning</span>
+                  <span class="notification-item__copy">
+                    <span class="font-medium text-on-surface">Alarm stok gudang (ROP)</span>
+                    <span class="text-on-surface-variant">4 SKU perlu ditinjau sebelum pemesanan</span>
+                  </span>
+                </button>
+                <button type="button" id="notif-item-fefo" class="search-item notification-item">
+                  <span class="material-symbols-outlined text-alarm-pink" aria-hidden="true">event_busy</span>
+                  <span class="notification-item__copy">
+                    <span class="font-medium text-on-surface">Alarm FEFO di outlet</span>
+                    <span class="text-on-surface-variant">18 batch perlu instruksi sales</span>
+                  </span>
+                </button>
+                <button type="button" id="notif-item-cdob" class="search-item notification-item">
+                  <span class="material-symbols-outlined text-emerald-600" aria-hidden="true">verified</span>
+                  <span class="notification-item__copy">
                     <span class="font-medium text-on-surface">Validasi Integritas CDOB &amp; FEFO</span>
-                    <span class="text-[11px] text-on-surface-variant">99.4% Kepatuhan batch tervalidasi</span>
-                  </div>
-                </div>
+                    <span class="text-on-surface-variant">99.4% Kepatuhan batch tervalidasi</span>
+                  </span>
+                </button>
               </div>
             </div>
           </div>

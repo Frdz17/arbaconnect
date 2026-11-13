@@ -67,9 +67,20 @@
       });
     },
 
-    navigate: function (path) {
-      window.ArbaStore.setPath(path);
-    },
+  navigate: function (path) {
+    var role = window.ArbaStore.getState().currentRole;
+    var allowedPaths = {
+      executive: ['executive-dashboard', 'inventory-stock-ledger', 'b2b-crm-directory', 'order-approval-queue', 'field-sales-pwa-preview'],
+      inventory: ['inventory-stock-ledger', 'order-approval-queue'],
+      'sales-ops': ['b2b-crm-directory', 'order-approval-queue'],
+      'field-sales': ['field-sales-pwa-preview']
+    }[role] || [];
+    if (allowedPaths.indexOf(path) === -1) {
+      this.showToast('Menu ini tidak tersedia untuk peran yang dipilih.', 'lock');
+      return;
+    }
+    window.ArbaStore.setPath(path);
+  },
 
     render: function () {
       var state = window.ArbaStore.getState();
@@ -89,8 +100,10 @@
         var path = btn.getAttribute('data-path');
         if (path === state.currentPath) {
           btn.classList.add('active');
+          btn.setAttribute('aria-current', 'page');
         } else {
           btn.classList.remove('active');
+          btn.removeAttribute('aria-current');
         }
       });
 
@@ -226,14 +239,16 @@
       var notifBtn = document.getElementById('header-notif-btn');
       var notifMenu = document.getElementById('header-notif-menu');
       if (notifBtn && notifMenu) {
-        notifBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          notifMenu.classList.toggle('hidden');
-        });
+          notifBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            notifMenu.classList.toggle('hidden');
+            notifBtn.setAttribute('aria-expanded', String(!notifMenu.classList.contains('hidden')));
+          });
 
         document.addEventListener('click', function (e) {
           if (!notifBtn.contains(e.target) && !notifMenu.contains(e.target)) {
             notifMenu.classList.add('hidden');
+            notifBtn.setAttribute('aria-expanded', 'false');
           }
         });
 
@@ -243,6 +258,7 @@
           notifOrder.addEventListener('click', function () {
             self.navigate('order-approval-queue');
             notifMenu.classList.add('hidden');
+            notifBtn.setAttribute('aria-expanded', 'false');
           });
         }
 
@@ -251,6 +267,16 @@
           notifRop.addEventListener('click', function () {
             self.navigate('inventory-stock-ledger');
             notifMenu.classList.add('hidden');
+            notifBtn.setAttribute('aria-expanded', 'false');
+          });
+        }
+
+        var notifFefo = document.getElementById('notif-item-fefo');
+        if (notifFefo) {
+          notifFefo.addEventListener('click', function () {
+            self.navigate('b2b-crm-directory');
+            notifMenu.classList.add('hidden');
+            notifBtn.setAttribute('aria-expanded', 'false');
           });
         }
 
@@ -259,6 +285,7 @@
           notifCdob.addEventListener('click', function () {
             self.showToast('Audit Kepatuhan CDOB: 99.4% Kepatuhan FEFO tervalidasi!', 'verified');
             notifMenu.classList.add('hidden');
+            notifBtn.setAttribute('aria-expanded', 'false');
           });
         }
       }
@@ -386,12 +413,33 @@
       });
     },
 
-    updateHeaderControls: function (state) {
-      // Role select value
-      var roleSelect = document.getElementById('role-perspective-select');
-      if (roleSelect && roleSelect.value !== state.currentRole) {
-        roleSelect.value = state.currentRole;
-      }
+  applyRoleNavigation: function (role) {
+    var allowedPaths = {
+      executive: ['executive-dashboard', 'inventory-stock-ledger', 'b2b-crm-directory', 'order-approval-queue', 'field-sales-pwa-preview'],
+      inventory: ['inventory-stock-ledger', 'order-approval-queue'],
+      'sales-ops': ['b2b-crm-directory', 'order-approval-queue'],
+      'field-sales': ['field-sales-pwa-preview']
+    }[role] || [];
+    document.querySelectorAll('.nav-button').forEach(function (button) {
+      var visible = allowedPaths.indexOf(button.getAttribute('data-path')) !== -1;
+      button.hidden = !visible;
+      button.setAttribute('aria-hidden', visible ? 'false' : 'true');
+      button.tabIndex = visible ? 0 : -1;
+    });
+    var currentPath = window.ArbaStore.getState().currentPath;
+    if (allowedPaths.indexOf(currentPath) === -1 && allowedPaths.length) {
+      window.ArbaStore.setPath(allowedPaths[0]);
+    }
+  },
+
+  updateHeaderControls: function (state) {
+    // Role select value
+    var roleSelect = document.getElementById('role-perspective-select');
+    if (roleSelect && roleSelect.value !== state.currentRole) {
+      roleSelect.value = state.currentRole;
+    }
+    this.applyRoleNavigation(state.currentRole);
+
 
       // Online status indicator
       var statusDot = document.getElementById('header-online-dot');

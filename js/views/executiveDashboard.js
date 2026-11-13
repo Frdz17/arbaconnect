@@ -29,6 +29,23 @@
     var products = appState.products;
     var outlets = appState.outlets;
     var analytics = window.ArbaStore.getAnalytics();
+    var operationsData = window.ArbaData || {};
+    var productionForecasts = operationsData.productionForecasts || [];
+    var outletConsignments = operationsData.outletConsignments || [];
+    var orangeAlarmTotal = operationsData.baseline && operationsData.baseline.alarmOrange || analytics.belowRop.length;
+    var pinkAlarmTotal = operationsData.baseline && operationsData.baseline.alarmPink || analytics.nearExpiry.length + outletConsignments.filter(function (item) { return item.nearExpiry; }).length;
+    var pinkAlarmItems = analytics.nearExpiry.map(function (product) {
+      return { name: product.name, sku: product.sku, batch: product.activeBatch, expiry: product.fefoDate, quantity: product.stock, location: 'Gudang utama' };
+    }).concat(outletConsignments.filter(function (item) { return item.nearExpiry; }).map(function (item) {
+      var outlet = outlets.find(function (candidate) { return candidate.code === item.outletCode; });
+      return { name: item.name, sku: item.sku, batch: item.batch, expiry: item.expiry, quantity: item.remainingQty, location: outlet ? outlet.name : item.outletCode, outletCode: item.outletCode };
+    }));
+    var orangeAlarmItems = analytics.belowRop.slice(0, 4);
+    if (orangeAlarmItems.length < 4) {
+      var forecastRambutan = productionForecasts.find(function (item) { return item.sku === 'SKU-ARB-MDRB500'; });
+      if (forecastRambutan) orangeAlarmItems.push(Object.assign({}, forecastRambutan, { stock: 155, rop: 160, activeBatch: 'BATCH-2026-029' }));
+    }
+    var slowMovingConsignments = outletConsignments.filter(function (item) { return item.velocity === 'LAMA_TIDAK_LAKU' && item.daysInOutlet >= 60; });
 
     // Filter orders in stream
     var filteredOrders = orders.filter(function (order) {
@@ -101,6 +118,28 @@
             </div>
           </div>
         </div>
+
+        <section class="focus-pillars" aria-labelledby="focus-pillars-title">
+          <div class="focus-pillars__heading">
+            <div>
+              <p class="eyebrow">Peta Operasional</p>
+              <h2 id="focus-pillars-title">6 fokus integrasi CV Arba&apos;in</h2>
+            </div>
+            <span class="focus-pillars__meta">Satu alur dari batch hingga produksi</span>
+          </div>
+          <div class="focus-pillars__grid">
+            ${[
+              ['inventory_2', 'Produk & batch', 'SKU, lot, dan FEFO'],
+              ['warehouse', 'Stok gudang', 'ROP dan mutasi stok'],
+              ['storefront', 'Outlet konsinyasi', '1.024 mitra aktif'],
+              ['route', 'Kunjungan sales', '15 outlet per hari'],
+              ['receipt_long', 'Penjualan & tagihan', 'Nota dan setoran'],
+              ['query_stats', 'Forecast produksi', 'Rencana bulan depan']
+            ].map(function (pillar, index) {
+              return `<article class="focus-pillar"><span class="focus-pillar__index">0${index + 1}</span><span class="material-symbols-outlined focus-pillar__icon" aria-hidden="true">${pillar[0]}</span><div><h3>${pillar[1]}</h3><p>${pillar[2]}</p></div></article>`;
+            }).join('')}
+          </div>
+        </section>
 
         <!-- Section 1: KPI Stat Grid (100% Live Reactive) -->
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -199,24 +238,19 @@
             <div>
               <div class="flex items-center justify-between mb-2">
                 <span class="text-xs text-on-surface-variant uppercase tracking-wider font-semibold">
-                  Integritas Stok &amp; ROP
+                  Alarm Gudang &amp; Outlet
                 </span>
-                <span class="flex items-center gap-1 text-xs font-semibold text-amber-700">
-                  <span class="material-symbols-outlined text-[14px]">warning</span>
-                  ${analytics.criticalSkuCount > 0 ? 'Perlu Tindakan' : 'Stok Aman'}
-                </span>
-              </div>
-              <div class="flex items-baseline gap-1.5 mb-1">
-                <span class="text-2xl ${analytics.criticalSkuCount > 0 ? 'text-rose-600' : 'text-emerald-600'} tracking-tight font-bold">
-                  ${analytics.criticalSkuCount}
-                </span>
-                <span class="text-xs text-on-surface-variant font-medium">
-                  SKU Kritis Terdeteksi
+                <span class="flex items-center gap-1 text-xs font-semibold text-rose-700">
+                  <span class="material-symbols-outlined text-[14px]">notification_important</span>
+                  Perlu Tindakan
                 </span>
               </div>
-              <p class="text-xs text-on-surface-variant leading-tight mt-1 mb-2">
-                <span class="font-semibold text-rose-600">${analytics.belowRop.length} di bawah ROP</span> · 
-                <span class="font-semibold text-amber-700">${analytics.nearExpiry.length} batch near-expiry</span>
+              <div class="alarm-kpi-pair">
+                <div><span>Alarm Oranye</span><strong>${orangeAlarmTotal}</strong></div>
+                <div><span>Alarm Pink · FEFO</span><strong>${pinkAlarmTotal}</strong></div>
+              </div>
+              <p class="text-xs text-on-surface-variant leading-tight mt-2 mb-2">
+                ${analytics.belowRop.length} SKU gudang · ${pinkAlarmItems.length} sampel batch di gudang &amp; apotek
               </p>
             </div>
             <button
@@ -231,6 +265,60 @@
             </button>
           </div>
         </div>
+
+        <section class="dashboard-alarms" aria-labelledby="alarm-center-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">Tindakan Hari Ini</p><h2 id="alarm-center-title">Pusat alarm cerdas</h2></div>
+            <span class="sample-status"><span class="status-dot online"></span> ROP gudang · FEFO gudang &amp; outlet</span>
+          </div>
+          <div class="dashboard-alarms__grid">
+            <article class="alarm-panel alarm-panel--orange" aria-labelledby="orange-alarm-title">
+              <div class="alarm-panel__header">
+                <div><span class="alarm-kicker"><span class="alarm-mark" aria-hidden="true"></span> Alarm oranye</span><h3 id="orange-alarm-title">Stok gudang menipis sesuai tonase</h3><p>Stok tersedia sudah menyentuh atau berada di bawah reorder point.</p></div>
+                <span class="alarm-total alarm-total--orange">${orangeAlarmTotal}<small>aktif</small></span>
+              </div>
+              <div class="alarm-list">
+                ${orangeAlarmItems.map(function (product) {
+                  var stockPct = Math.max(4, Math.min(100, Math.round((product.stock / Math.max(product.rop || 1, product.stock || 1)) * 100)));
+                  var forecast = productionForecasts.find(function (item) { return item.sku === product.sku; });
+                  return `<div class="alarm-row"><div class="alarm-row__main"><div><strong>${product.name}</strong><span class="mono-label">${product.sku}</span></div><span class="alarm-stock">${product.stock} <small>/ ROP ${product.rop}</small></span></div><div class="alarm-row__meta"><span>${forecast ? forecast.monthlyConsumptionNote : 'Konsumsi bulanan perlu ditinjau'}</span><span>Batch ${product.activeBatch || '—'}</span></div><div class="alarm-progress"><span style="width:${stockPct}%"></span></div></div>`;
+                }).join('') || '<div class="empty-alarm">Semua SKU gudang berada di atas ROP.</div>'}
+              </div>
+              <button class="alarm-action js-dashboard-navigate" data-nav-path="inventory-stock-ledger" type="button">Buka kontrol stok <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
+            </article>
+
+            <article class="alarm-panel alarm-panel--pink" aria-labelledby="pink-alarm-title">
+              <div class="alarm-panel__header">
+                <div><span class="alarm-kicker"><span class="alarm-mark" aria-hidden="true"></span> Alarm pink · FEFO</span><h3 id="pink-alarm-title">Produk hampir kedaluwarsa</h3><p>Batch terpantau di gudang utama dan rak outlet mitra.</p></div>
+                <span class="alarm-total alarm-total--pink">${pinkAlarmTotal}<small>aktif</small></span>
+              </div>
+              <div class="alarm-list">
+                ${pinkAlarmItems.slice(0, 4).map(function (item) {
+                  return `<div class="alarm-row"><div class="alarm-row__main"><div><strong>${item.name}</strong><span class="mono-label">${item.sku} · ${item.batch || 'Batch terpantau'}</span></div><span class="alarm-quantity">${item.quantity} btl</span></div><div class="alarm-row__meta"><span class="alarm-location"><span class="material-symbols-outlined" aria-hidden="true">${item.outletCode ? 'store' : 'warehouse'}</span>${item.location}</span><span class="expiry-chip">ED ${item.expiry || 'Perlu verifikasi'}</span></div><div class="alarm-row__actions">${item.outletCode ? `<button class="text-action js-dashboard-outlet" data-outlet-code="${item.outletCode}" type="button">Instruksikan sales <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>` : '<span class="alarm-muted">Prioritaskan FEFO gudang</span>'}</div></div>`;
+                }).join('') || '<div class="empty-alarm">Tidak ada batch near-expiry yang memerlukan tindakan.</div>'}
+              </div>
+              <p class="alarm-footnote">Menampilkan ${Math.min(pinkAlarmItems.length, 4)} sampel dari ${pinkAlarmTotal} alarm pada jaringan.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="forecast-layout" aria-labelledby="forecast-title">
+          <article class="forecast-panel">
+            <div class="section-heading section-heading--compact"><div><p class="eyebrow">Pilar 6 · Perencanaan</p><h2 id="forecast-title">Penjualan teratas &amp; forecast produksi</h2></div><span class="forecast-window">Proyeksi bulan depan</span></div>
+            <div class="table-scroll"><table class="forecast-table"><thead><tr><th>Produk / SKU</th><th>Divisi</th><th>Laku bulan ini</th><th>Forecast</th><th>Rencana produksi</th></tr></thead><tbody>
+              ${productionForecasts.map(function (product) { return `<tr><td><div class="forecast-product"><span class="rank-badge">${String(product.rank).padStart(2, '0')}</span><div><strong>${product.name}</strong><span class="mono-label">${product.sku}</span></div></div></td><td><span class="division-badge ${product.division === 'Kosmetik & Perawatan' ? 'division-badge--sky' : ''}">${product.division}</span></td><td class="mono-value">${product.monthlySoldUnits.toLocaleString('id-ID')} btl</td><td class="mono-value forecast-value">${product.forecastNextMonthUnits.toLocaleString('id-ID')} btl</td><td><strong>${product.productionRecommendation}</strong></td></tr>`; }).join('')}
+            </tbody></table></div>
+          </article>
+          <aside class="slow-moving-panel" aria-labelledby="slow-moving-title">
+            <div class="section-heading section-heading--compact"><div><p class="eyebrow">Rotasi stok outlet</p><h2 id="slow-moving-title">Titipan lama tidak laku</h2></div><span class="slow-moving-count">${slowMovingConsignments.length}</span></div>
+            <p class="panel-description">Pantau barang yang mengendap lebih dari 60 hari untuk ditarik atau dipindahkan.</p>
+            <div class="slow-moving-list">${slowMovingConsignments.map(function (item) {
+              var outlet = outlets.find(function (candidate) { return candidate.code === item.outletCode; });
+              return `<div class="slow-moving-row"><span class="slow-moving-icon material-symbols-outlined" aria-hidden="true">inventory_2</span><div class="slow-moving-row__content"><strong>${item.name}</strong><span>${outlet ? outlet.name : item.outletCode} · ${item.daysInOutlet} hari di rak</span></div><button class="icon-action js-dashboard-outlet" data-outlet-code="${item.outletCode}" type="button" aria-label="Lihat outlet ${outlet ? outlet.name : item.outletCode}"><span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button></div>`;
+            }).join('') || '<div class="empty-alarm">Belum ada stok konsinyasi yang slow-moving.</div>'}</div>
+            <button class="alarm-action js-dashboard-navigate" data-nav-path="b2b-crm-directory" type="button">Buka direktori outlet <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
+          </aside>
+        </section>
 
         <!-- Section 2: Analytics & Insights Section (60% / 40%) -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
@@ -819,6 +907,19 @@
         window.ArbaApp.navigate('inventory-stock-ledger');
       });
     }
+
+    container.querySelectorAll('.js-dashboard-navigate').forEach(function (button) {
+      button.addEventListener('click', function () {
+        window.ArbaApp.navigate(button.getAttribute('data-nav-path'));
+      });
+    });
+    container.querySelectorAll('.js-dashboard-outlet').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var outlet = window.ArbaStore.getState().outlets.find(function (item) { return item.code === button.getAttribute('data-outlet-code'); });
+        if (outlet) window.ArbaStore.setSelectedOutletId(outlet.id);
+        window.ArbaApp.navigate('b2b-crm-directory');
+      });
+    });
 
     // Period toggle
     var btnMonth = container.querySelector('#filter-period-month');
