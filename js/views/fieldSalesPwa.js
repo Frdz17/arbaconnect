@@ -20,11 +20,12 @@
     selectedOutletCode: 'AP-SLO-001',
     activeCategory: 'all',
     productSearch: '',
+    selectedRep: '',
     cart: {
       'SKU-ARB-MDR500': 6,
       'SKU-ARB-HBT100': 4
     },
-    selectedTerm: 'Net 30 Hari',
+    selectedTerm: 'Konsinyasi / Titip Jual',
     orderNotes: '',
     isSubmitting: false,
     gpsCheckedIn: true,
@@ -56,11 +57,15 @@
       }
     }
 
-    var currentOutlet = outlets.find(function (o) { return o.code === state.selectedOutletCode; }) || outlets[0];
+  var currentOutlet = outlets.find(function (o) { return o.code === state.selectedOutletCode; }) || outlets[0];
+  var pwaConsignmentCatalog = (window.ArbaData && window.ArbaData.outletConsignments) || [];
+  var currentOutletConsignments = pwaConsignmentCatalog.filter(function (item) { return item.outletCode === currentOutlet.code; });
 
-    // Sales rep aktif & progres harian (dihitung live dari log kunjungan)
-    var salesTeam = appState.salesTeam || [];
-    var currentRep = appState.currentSalesRep || 'Budi Santoso';
+  // Sales rep aktif & progres harian (dihitung live dari log kunjungan)
+  var salesTeam = appState.salesTeam || [];
+  var currentRep = state.selectedRep || appState.currentSalesRep || 'Budi Santoso';
+  var currentRepData = salesTeam.find(function (rep) { return rep.name === currentRep; });
+  var currentDivision = currentRepData ? currentRepData.division : 'Madu & Herbal';
     var repInitials = currentRep.split(' ').map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
     var analytics = window.ArbaStore.getAnalytics();
     var repPerf = analytics.salesPerformance.find(function (s) { return s.name === currentRep; }) ||
@@ -101,8 +106,8 @@
       return sum + (prod ? prod.unitPrice * qty : 0);
     }, 0);
 
-    // Validasi plafon kredit outlet (termin non-COD)
-    var isCreditTerm = !/COD|Tunai/i.test(state.selectedTerm);
+  // Hanya termin bersih yang menggunakan plafon kredit; konsinyasi dan pembayaran di awal tidak menambah piutang.
+  var isCreditTerm = /Net\s?(14|30)/i.test(state.selectedTerm);
     var overCredit = isCreditTerm && totalAmount > (currentOutlet.creditRemaining || 0);
 
     var html = `
@@ -264,6 +269,59 @@
                   </div>
                 </div>
 
+                <div class="field-sales-context">
+                  <div>
+                    <span class="eyebrow">SALES AKTIF</span>
+                    <strong>${currentRep}</strong>
+                    <span>${currentDivision}</span>
+                  </div>
+                  <label for="pwa-sales-rep-select">Ganti sales</label>
+                  <select id="pwa-sales-rep-select" aria-label="Pilih sales dan divisi">
+                    ${salesTeam.map(function (rep) {
+                      return `<option value="${window.ArbaUtils.escapeHtml(rep.name)}" ${rep.name === currentRep ? 'selected' : ''}>${window.ArbaUtils.escapeHtml(rep.name)} · ${window.ArbaUtils.escapeHtml(rep.division || 'Madu & Herbal')}</option>`;
+                    }).join('')}
+                  </select>
+                </div>
+
+                <section class="pwa-consignment-panel" aria-labelledby="pwa-consignment-title">
+                  <div class="pwa-consignment-heading">
+                    <div>
+                      <span class="eyebrow">STOK OUTLET · TITIP JUAL</span>
+                      <h3 id="pwa-consignment-title">Konsinyasi &amp; FEFO</h3>
+                    </div>
+                    <span class="pwa-consignment-count">${currentOutletConsignments.length} SKU</span>
+                  </div>
+  ${currentOutletConsignments.length ? `
+  <button id="btn-pwa-consignment-reconcile" class="btn-pwa-consignment-reconcile" type="button" aria-label="Tagih penjualan konsinyasi dan isi ulang stok">
+  <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+  Tagih laku &amp; isi ulang
+  </button>
+  <div class="pwa-consignment-list">
+                      ${currentOutletConsignments.map(function (item) {
+                        return `
+                          <article class="pwa-consignment-item ${item.nearExpiry ? 'pwa-consignment-item--alert' : ''}">
+                            <div class="pwa-consignment-product">
+                              <strong>${item.name}</strong>
+                              <span>${item.sku} · Batch ${item.batch}</span>
+                            </div>
+                            <div class="pwa-consignment-qty">
+                              <span><small>Laku</small><strong>${item.soldQty}</strong></span>
+                              <span><small>Sisa</small><strong>${item.remainingQty}</strong></span>
+                            </div>
+                            <div class="pwa-consignment-expiry ${item.nearExpiry ? 'text-rose-700' : ''}">
+                              <span>${item.nearExpiry ? 'FEFO prioritas' : 'ED'}</span><strong>${item.expiry}</strong>
+                            </div>
+                          </article>
+                        `;
+                      }).join('')}
+                    </div>
+
+                  ` : `
+                    <div class="pwa-consignment-empty">Belum ada titipan untuk outlet ini. Gunakan termin penjualan di bawah untuk order reguler.</div>
+                  `}
+                  <p class="pwa-demo-note">Rekonsiliasi konsinyasi tersimpan sebagai simulasi sesi perangkat ini.</p>
+                </section>
+
                 <!-- Quick Actions: Repeat Order & Visit-only (canvassing) -->
                 <div class="flex gap-2" style="display:flex; gap:0.5rem; margin-top:0.5rem;">
                   <button
@@ -347,6 +405,7 @@
                     var qty = state.cart[prod.sku] || 0;
                     var isLow = prod.stock <= prod.rop;
                     var atMax = qty >= prod.stock;
+                    var outletStockItem = currentOutletConsignments.find(function (item) { return item.sku === prod.sku; });
 
                     return `
                       <div
@@ -366,7 +425,12 @@
                               ${window.ArbaUtils.formatRupiah(prod.unitPrice)}
                             </span>
                             <span>·</span>
-                            <span class="font-mono text-slate-500">Stok: ${prod.stock}</span>
+                            <span class="font-mono text-slate-500">Gudang ${prod.stock}</span>
+                          </div>
+                          <div class="product-stock-triple" aria-label="Rincian stok per lokasi">
+                            <span>Gudang <strong>${prod.stock}</strong></span>
+                            <span>Outlet <strong>${outletStockItem ? outletStockItem.remainingQty : 0}</strong></span>
+                            <span>Laku/bln <strong>${outletStockItem ? outletStockItem.soldQty : 0}</strong></span>
                           </div>
                           ${prod.stock === 0 ? `
                             <div class="text-[10px] font-semibold mt-0.5" style="color:#be123c;">
@@ -420,9 +484,9 @@
                     class="bg-white px-2.5 py-1 rounded-md text-xs font-semibold text-slate-800 border border-slate-200 cursor-pointer focus:outline-none"
                     style="border:1px solid #cbd5e1;"
                   >
-                    <option value="Net 30 Hari" ${state.selectedTerm === 'Net 30 Hari' ? 'selected' : ''}>Net 30 Hari</option>
-                    <option value="Net 14 Hari" ${state.selectedTerm === 'Net 14 Hari' ? 'selected' : ''}>Net 14 Hari</option>
-                    <option value="COD Tunai" ${state.selectedTerm === 'COD Tunai' ? 'selected' : ''}>COD Tunai</option>
+                  <option value="Konsinyasi / Titip Jual" ${state.selectedTerm === 'Konsinyasi / Titip Jual' ? 'selected' : ''}>Konsinyasi / Titip Jual</option>
+                  <option value="Jatuh Tempo Net 14 Hari" ${state.selectedTerm === 'Jatuh Tempo Net 14 Hari' ? 'selected' : ''}>Jatuh Tempo Net 14 Hari</option>
+                  <option value="Cash di Awal" ${state.selectedTerm === 'Cash di Awal' ? 'selected' : ''}>Cash di Awal</option>
                   </select>
                 </div>
                 <input
@@ -472,10 +536,91 @@
       isCheckedInHere: isCheckedInHere,
       lastOutletOrder: lastOutletOrder,
       currentRep: currentRep
-    });
+    }, currentOutletConsignments);
   }
 
-  function bindEvents(container, currentOutlet, products, totalAmount, ctx) {
+  function openPwaConsignmentModal(container, outlet, items) {
+    if (!items.length) {
+      window.ArbaApp.showToast('Belum ada stok konsinyasi untuk outlet ini.', 'inventory_2');
+      return;
+    }
+
+    var products = window.ArbaStore.getState().products;
+    var modalHtml = `
+      <div class="modal-dialog max-w-2xl">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">KUNJUNGAN OUTLET · SIMULASI</p>
+            <h2 id="pwa-consignment-modal-title">Tagih laku &amp; isi ulang</h2>
+            <p>${window.ArbaUtils.escapeHtml(outlet.name)}</p>
+          </div>
+          <button class="icon-btn" type="button" aria-label="Tutup" onclick="window.ArbaApp.closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+        </div>
+        <form id="pwa-consignment-form" class="modal-body consignment-reconcile-form">
+          ${items.map(function (item, index) {
+            var product = products.find(function (entry) { return entry.sku === item.sku; });
+            var availableStock = product ? product.stock : 0;
+            return `
+              <fieldset class="consignment-form-row">
+                <legend>${window.ArbaUtils.escapeHtml(item.name)} · ED ${window.ArbaUtils.escapeHtml(item.expiry)}</legend>
+                <div class="consignment-form-fields">
+                  <label for="consignment-sold-${index}">Terjual sejak kunjungan terakhir
+                    <input id="consignment-sold-${index}" name="sold-${index}" type="number" min="0" max="${item.remainingQty}" value="0" inputmode="numeric" />
+                    <small>Maksimum ${item.remainingQty} unit · ${window.ArbaUtils.formatRupiah(item.unitPrice)} / unit</small>
+                  </label>
+                  <label for="consignment-restock-${index}">Isi ulang dari gudang
+                    <input id="consignment-restock-${index}" name="restock-${index}" type="number" min="0" max="${availableStock}" value="0" inputmode="numeric" />
+                    <small>Gudang tersedia ${availableStock} unit</small>
+                  </label>
+                </div>
+              </fieldset>
+            `;
+          }).join('')}
+          <p class="consignment-form-note">Perubahan hanya disimpan di sesi demo ini. Stok gudang dan buku besar tidak berubah.</p>
+          <div class="modal-footer">
+            <button class="btn-outline" type="button" onclick="window.ArbaApp.closeModal()">Batal</button>
+            <button class="btn-primary" type="submit"><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span> Simpan tagihan</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    window.ArbaApp.openModal(modalHtml);
+    setTimeout(function () {
+      var form = document.getElementById('pwa-consignment-form');
+      if (!form) return;
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var totalCollected = 0;
+        var productsNow = window.ArbaStore.getState().products;
+        var adjustments = [];
+        for (var index = 0; index < items.length; index += 1) {
+          var item = items[index];
+          var soldInput = document.getElementById('consignment-sold-' + index);
+          var restockInput = document.getElementById('consignment-restock-' + index);
+          var sold = Number(soldInput.value || 0);
+          var restock = Number(restockInput.value || 0);
+          var product = productsNow.find(function (entry) { return entry.sku === item.sku; });
+          if (!Number.isInteger(sold) || !Number.isInteger(restock) || sold < 0 || restock < 0 || sold > item.remainingQty || restock > (product ? product.stock : 0)) {
+            window.ArbaApp.showToast('Jumlah terjual atau isi ulang melebihi stok yang tersedia.', 'warning');
+            return;
+          }
+          adjustments.push({ item: item, sold: sold, restock: restock });
+        }
+        adjustments.forEach(function (adjustment) {
+          adjustment.item.soldQty += adjustment.sold;
+          adjustment.item.remainingQty = adjustment.item.remainingQty - adjustment.sold + adjustment.restock;
+          adjustment.item.consignedQty += adjustment.restock;
+          totalCollected += adjustment.sold * adjustment.item.unitPrice;
+        });
+        window.ArbaApp.closeModal();
+        window.ArbaApp.showToast('Rekonsiliasi sesi demo tersimpan · ' + window.ArbaUtils.formatRupiah(totalCollected) + ' ditagih.', 'receipt_long');
+        renderFieldSalesPwa(container);
+      });
+    }, 0);
+  }
+
+  function bindEvents(container, currentOutlet, products, totalAmount, ctx, currentOutletConsignments) {
     ctx = ctx || {};
 
     // Sales rep account switch
@@ -483,6 +628,7 @@
     if (repSelect) {
       repSelect.addEventListener('change', function (e) {
         state.gpsCheckedIn = false;
+        state.selectedRep = e.target.value;
         window.ArbaStore.setCurrentSalesRep(e.target.value);
         window.ArbaApp.showToast('Masuk sebagai ' + e.target.value, 'badge');
       });
@@ -557,6 +703,22 @@
       outletSelect.addEventListener('change', function (e) {
         state.selectedOutletCode = e.target.value;
         renderFieldSalesPwa(container);
+      });
+    }
+
+    var salesRepSelect = container.querySelector('#pwa-sales-rep-select');
+    if (salesRepSelect) {
+      salesRepSelect.addEventListener('change', function (event) {
+        state.selectedRep = event.target.value;
+        window.ArbaStore.setCurrentSalesRep(event.target.value);
+        renderFieldSalesPwa(container);
+      });
+    }
+
+    var consignmentButton = container.querySelector('#btn-pwa-consignment-reconcile');
+    if (consignmentButton) {
+      consignmentButton.addEventListener('click', function () {
+        openPwaConsignmentModal(container, currentOutlet, currentOutletConsignments);
       });
     }
 

@@ -23,6 +23,7 @@
     selectedRegion: 'ALL',
     selectedType: 'ALL',
     selectedCredit: 'ALL',
+    selectedScheme: 'ALL',
     activeRouteFilter: 'all'
   };
 
@@ -32,6 +33,19 @@
     var selectedOutletId = appState.selectedOutletId;
 
     var selectedOutlet = outlets.find(function (o) { return o.id === selectedOutletId; }) || outlets[0];
+    var crmData = window.ArbaData || {};
+    var consignmentCatalog = crmData.outletConsignments || [];
+    var baseline = crmData.baseline || {};
+    var totalOutletCount = outlets.length + (baseline.extraApotek || 0) + (baseline.extraMinimarket || 0);
+    var apotekCount = outlets.filter(function (outlet) { return outlet.type !== 'Minimarket'; }).length + (baseline.extraApotek || 0);
+    var retailCount = outlets.filter(function (outlet) { return outlet.type === 'Minimarket'; }).length + (baseline.extraMinimarket || 0);
+    var selectedOutletConsignments = selectedOutlet ? consignmentCatalog.filter(function (item) { return item.outletCode === selectedOutlet.code; }) : [];
+
+    function getOutletScheme(outlet) {
+      if (consignmentCatalog.some(function (item) { return item.outletCode === outlet.code; })) return 'KONSINYASI';
+      if (/COD|Tunai|Cash/i.test(outlet.terms || '')) return 'CASH';
+      return 'NET';
+    }
 
     // Filter outlets
     var filteredOutlets = outlets.filter(function (outlet) {
@@ -47,8 +61,10 @@
       var matchesRoute =
         state.activeRouteFilter === 'all' ||
         outlet.salesRep.toLowerCase().indexOf(state.activeRouteFilter.toLowerCase()) !== -1;
+      var outletScheme = getOutletScheme(outlet);
+      var matchesScheme = state.selectedScheme === 'ALL' || outletScheme === state.selectedScheme;
 
-      return matchesSearch && matchesRegion && matchesType && matchesCredit && matchesRoute;
+      return matchesSearch && matchesRegion && matchesType && matchesCredit && matchesRoute && matchesScheme;
     });
 
     var percentRemaining = selectedOutlet
@@ -114,7 +130,7 @@
                 </span>
                 <div class="flex items-baseline gap-1.5 mt-1">
                   <span class="text-2xl text-on-surface font-bold">
-                    ${168 + (outlets.length - 6)}
+                    ${totalOutletCount}
                   </span>
                   <span class="text-xs text-on-surface-variant font-medium">Outlet</span>
                 </div>
@@ -126,7 +142,7 @@
             <div class="mt-4 pt-2.5 flex items-center justify-between text-xs text-on-surface-variant border-t border-border-subtle/40">
               <div class="flex items-center gap-1.5 text-emerald-700 font-semibold">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-600" style="display:inline-block; width:6px; height:6px;"></span>
-                <span>148 Aktif</span>
+                  <span>${totalOutletCount.toLocaleString('id-ID')} Aktif</span>
               </div>
               <span class="text-on-surface-variant">20 Baru / Evaluasi</span>
             </div>
@@ -140,7 +156,7 @@
                   Jaringan Apotek
                 </span>
                 <div class="flex items-baseline gap-1.5 mt-1">
-                  <span class="text-2xl text-primary font-bold">104</span>
+                  <span class="text-2xl text-primary font-bold">${apotekCount.toLocaleString('id-ID')}</span>
                   <span class="text-xs text-on-surface-variant font-medium">Titik Relasi</span>
                 </div>
               </div>
@@ -150,7 +166,7 @@
             </div>
             <div class="mt-4 pt-2.5 flex items-center justify-between text-xs border-t border-border-subtle/40 text-on-surface-variant">
               <span>Rata-rata termin:</span>
-              <span class="font-semibold text-primary">Net 30 Hari</span>
+                  <span class="font-semibold text-primary">Konsinyasi &gt;90%</span>
             </div>
           </div>
 
@@ -162,7 +178,7 @@
                   Minimarket &amp; Ritel
                 </span>
                 <div class="flex items-baseline gap-1.5 mt-1">
-                  <span class="text-2xl text-on-surface font-bold">64</span>
+                  <span class="text-2xl text-on-surface font-bold">${retailCount.toLocaleString('id-ID')}</span>
                   <span class="text-xs text-on-surface-variant font-medium">Toko</span>
                 </div>
               </div>
@@ -172,7 +188,7 @@
             </div>
             <div class="mt-4 pt-2.5 flex items-center justify-between text-xs border-t border-border-subtle/40 text-on-surface-variant">
               <span>Rata-rata termin:</span>
-              <span class="font-semibold text-on-surface">Net 14 Hari</span>
+                  <span class="font-semibold text-on-surface">Net 14 · Cash</span>
             </div>
           </div>
 
@@ -267,6 +283,17 @@
             </div>
           </div>
 
+          <div class="crm-scheme-filter">
+            <label for="crm-scheme-select">Skema Penjualan</label>
+            <select id="crm-scheme-select" aria-label="Filter skema penjualan">
+              <option value="ALL" ${state.selectedScheme === 'ALL' ? 'selected' : ''}>Semua skema</option>
+              <option value="KONSINYASI" ${state.selectedScheme === 'KONSINYASI' ? 'selected' : ''}>Konsinyasi / Titip Jual (&gt;90%)</option>
+              <option value="NET" ${state.selectedScheme === 'NET' ? 'selected' : ''}>Jatuh Tempo Net 14 / 30 Hari</option>
+              <option value="CASH" ${state.selectedScheme === 'CASH' ? 'selected' : ''}>Cash di Awal / COD</option>
+            </select>
+            <span>Skema transaksi dapat dipilih per outlet.</span>
+          </div>
+
           <!-- Active Segment Chips / Quick Filters -->
           <div class="flex items-center justify-between pt-2">
             <div class="flex items-center gap-space-xs flex-wrap">
@@ -297,7 +324,7 @@
               }).join('')}
             </div>
             <div class="text-on-surface-variant font-code-table text-code-table hidden lg:block text-xs font-mono">
-              Menampilkan ${filteredOutlets.length} dari ${168 + (outlets.length - 6)} outlet
+              Menampilkan ${filteredOutlets.length} dari ${totalOutletCount} outlet
             </div>
           </div>
         </div>
@@ -314,12 +341,12 @@
                 </span>
               </div>
               <span class="font-label-sm text-label-sm text-on-surface-variant text-xs">
-                Klik baris outlet untuk detail performa &amp; riwayat
+                Klik baris untuk detail · Geser tabel untuk kolom lainnya
               </span>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs">
+            <div class="crm-table-scroll overflow-x-auto" aria-label="Tabel outlet yang dapat digeser horizontal">
+              <table class="crm-directory-table w-full text-left text-xs">
                 <thead>
                   <tr class="bg-surface-container-low/70 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
                     <th class="py-3 px-space-md">Kode &amp; Nama Outlet</th>
@@ -495,7 +522,7 @@
             <!-- Pagination / Table Footer -->
             <div class="px-space-md py-3 bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-border-subtle/30 text-xs p-3">
               <span class="font-label-sm text-label-sm text-on-surface-variant">
-                Menampilkan ${filteredOutlets.length} dari ${168 + (outlets.length - 6)} outlet terdaftar CV Arba'in
+                Menampilkan ${filteredOutlets.length} dari ${totalOutletCount} outlet terdaftar CV Arba'in
               </span>
               <div class="flex items-center gap-1">
                 <button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant bg-surface-container-lowest hover:bg-surface-container transition-colors cursor-pointer border-0" type="button">
@@ -585,6 +612,51 @@
                     <span class="font-semibold text-primary">Apr: 26.0 Jt (▲15%)</span>
                   </div>
                 </div>
+
+                <section class="outlet-consignment-card" aria-labelledby="outlet-consignment-title">
+                  <div class="consignment-card-heading">
+                    <div>
+                      <p class="eyebrow">STOK DI OUTLET</p>
+                      <h3 id="outlet-consignment-title">Konsinyasi &amp; FEFO</h3>
+                    </div>
+                    <span class="scheme-badge ${getOutletScheme(selectedOutlet) === 'KONSINYASI' ? 'scheme-badge--consignment' : 'scheme-badge--standard'}">
+                      ${getOutletScheme(selectedOutlet) === 'KONSINYASI' ? 'Titip jual' : getOutletScheme(selectedOutlet) === 'CASH' ? 'Cash di awal' : 'Termin net'}
+                    </span>
+                  </div>
+                  ${selectedOutletConsignments.length ? `
+                    <div class="consignment-item-list">
+                      ${selectedOutletConsignments.map(function (item) {
+                        var isSlow = item.velocity === 'LAMA_TIDAK_LAKU';
+                        return `
+                          <article class="consignment-item ${item.nearExpiry ? 'consignment-item--alert' : ''}">
+                            <div class="consignment-item-topline">
+                              <div>
+                                <h4>${item.name}</h4>
+                                <span class="consignment-sku">${item.sku} · ${item.batch}</span>
+                              </div>
+                              <span class="consignment-status ${item.nearExpiry ? 'consignment-status--pink' : isSlow ? 'consignment-status--muted' : 'consignment-status--good'}">
+                                ${item.nearExpiry ? 'FEFO prioritas' : isSlow ? 'Perputaran lambat' : 'Perputaran sehat'}
+                              </span>
+                            </div>
+                            <div class="consignment-quantities">
+                              <span><small>Titip</small><strong>${item.consignedQty}</strong></span>
+                              <span><small>Terjual</small><strong>${item.soldQty}</strong></span>
+                              <span><small>Sisa</small><strong>${item.remainingQty}</strong></span>
+                              <span><small>ED</small><strong>${item.expiry}</strong></span>
+                            </div>
+                            ${isSlow ? `<p class="consignment-note">Belum bergerak ${item.daysInOutlet} hari. Prioritaskan bundling atau rotasi antar outlet.</p>` : ''}
+                          </article>
+                        `;
+                      }).join('')}
+                    </div>
+                    <p class="consignment-footnote">Penjualan titip jual dan isi ulang dikonfirmasi sales saat kunjungan outlet.</p>
+                  ` : `
+                    <div class="consignment-empty">
+                      <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+                      <p>Belum ada SKU konsinyasi tercatat untuk outlet ini.</p>
+                    </div>
+                  `}
+                </section>
 
                 <!-- Credit Line & Terms Visualizer -->
                 <div class="space-y-2 text-xs">
@@ -791,6 +863,15 @@
     if (creditSelect) {
       creditSelect.addEventListener('change', function (e) {
         state.selectedCredit = e.target.value;
+        renderB2bCrm(container);
+      });
+    }
+
+    // Sales scheme filter
+    var schemeSelect = container.querySelector('#crm-scheme-select');
+    if (schemeSelect) {
+      schemeSelect.addEventListener('change', function (e) {
+        state.selectedScheme = e.target.value;
         renderB2bCrm(container);
       });
     }

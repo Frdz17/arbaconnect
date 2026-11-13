@@ -820,14 +820,14 @@ window.ArbaData = (function() {
   // SEBELUM transaksi live di aplikasi ini (hasil migrasi data awal).
   // ---------------------------------------------------------------------------
   const salesTeam = [
-    { id: 'REP-SR-04',  name: 'Budi Santoso',    area: 'Solo Tengah & Laweyan', dailyVisitTarget: 7, monthlyRevenueTarget: 95000000, monthlyRevenueBase: 71200000, monthlyVisitBase: 118 },
-    { id: 'REP-SKH-02', name: 'Anita Rahmawati', area: 'Jebres & Sukoharjo',    dailyVisitTarget: 6, monthlyRevenueTarget: 70000000, monthlyRevenueBase: 58400000, monthlyVisitBase: 104 },
-    { id: 'REP-SKH-05', name: 'Tri Wahyuni',     area: 'Sukoharjo & Solo Baru', dailyVisitTarget: 6, monthlyRevenueTarget: 60000000, monthlyRevenueBase: 49750000, monthlyVisitBase: 97 },
-    { id: 'REP-KRA-03', name: 'Agus Hermawan',   area: 'Karanganyar Kota',      dailyVisitTarget: 6, monthlyRevenueTarget: 60000000, monthlyRevenueBase: 38900000, monthlyVisitBase: 81 },
-    { id: 'REP-KRA-01', name: 'Hadi Kurniawan',  area: 'Palur & Karanganyar',   dailyVisitTarget: 5, monthlyRevenueTarget: 50000000, monthlyRevenueBase: 41300000, monthlyVisitBase: 88 },
-    { id: 'REP-KLT-01', name: 'Rian Pratama',    area: 'Klaten & Sragen',       dailyVisitTarget: 5, monthlyRevenueTarget: 55000000, monthlyRevenueBase: 46100000, monthlyVisitBase: 86 },
-    { id: 'REP-BYL-03', name: 'Rahmat Adi',      area: 'Boyolali',              dailyVisitTarget: 5, monthlyRevenueTarget: 50000000, monthlyRevenueBase: 39600000, monthlyVisitBase: 79 },
-    { id: 'REP-KRA-02', name: 'Bambang S.',      area: 'Karanganyar Timur',     dailyVisitTarget: 5, monthlyRevenueTarget: 45000000, monthlyRevenueBase: 35800000, monthlyVisitBase: 74 }
+    { id: 'REP-SR-04',  name: 'Budi Santoso',    area: 'Solo Tengah & Laweyan', dailyVisitTarget: 15, monthlyRevenueTarget: 95000000, monthlyRevenueBase: 71850000, monthlyVisitBase: 118, division: 'Madu & Herbal' },
+    { id: 'REP-SKH-02', name: 'Anita Rahmawati', area: 'Jebres & Sukoharjo',    dailyVisitTarget: 15, monthlyRevenueTarget: 70000000, monthlyRevenueBase: 58400000, monthlyVisitBase: 104, division: 'Kosmetik & Perawatan' },
+    { id: 'REP-SKH-05', name: 'Tri Wahyuni',     area: 'Sukoharjo & Solo Baru', dailyVisitTarget: 15, monthlyRevenueTarget: 60000000, monthlyRevenueBase: 49750000, monthlyVisitBase: 97, division: 'Kosmetik & Perawatan' },
+    { id: 'REP-KRA-03', name: 'Agus Hermawan',   area: 'Karanganyar Kota',      dailyVisitTarget: 15, monthlyRevenueTarget: 60000000, monthlyRevenueBase: 38900000, monthlyVisitBase: 81, division: 'Madu & Herbal' },
+    { id: 'REP-KRA-01', name: 'Hadi Kurniawan',  area: 'Palur & Karanganyar',   dailyVisitTarget: 15, monthlyRevenueTarget: 50000000, monthlyRevenueBase: 41300000, monthlyVisitBase: 88, division: 'Madu & Herbal' },
+    { id: 'REP-KLT-01', name: 'Rian Pratama',    area: 'Klaten & Sragen',       dailyVisitTarget: 15, monthlyRevenueTarget: 55000000, monthlyRevenueBase: 46100000, monthlyVisitBase: 86, division: 'Kosmetik & Perawatan' },
+    { id: 'REP-BYL-03', name: 'Rahmat Adi',      area: 'Boyolali',              dailyVisitTarget: 15, monthlyRevenueTarget: 50000000, monthlyRevenueBase: 39600000, monthlyVisitBase: 79, division: 'Madu & Herbal' },
+    { id: 'REP-KRA-02', name: 'Bambang S.',      area: 'Karanganyar Timur',     dailyVisitTarget: 15, monthlyRevenueTarget: 45000000, monthlyRevenueBase: 35800000, monthlyVisitBase: 74, division: 'Madu & Herbal' }
   ];
 
   // ---------------------------------------------------------------------------
@@ -837,10 +837,10 @@ window.ArbaData = (function() {
   // ---------------------------------------------------------------------------
   const visitLogs = (function () {
     const plan = [
-      ['Budi Santoso', 5], ['Anita Rahmawati', 5], ['Tri Wahyuni', 4], ['Agus Hermawan', 3],
-      ['Hadi Kurniawan', 4], ['Rian Pratama', 4], ['Rahmat Adi', 3], ['Bambang S.', 4]
+      ['Budi Santoso', 11], ['Anita Rahmawati', 11], ['Tri Wahyuni', 11], ['Agus Hermawan', 11],
+      ['Hadi Kurniawan', 11], ['Rian Pratama', 11], ['Rahmat Adi', 11], ['Bambang S.', 11]
     ];
-    const outcomes = ['ORDER', 'ORDER', 'NO_ORDER_STOCK_FULL', 'ORDER', 'COLLECTION', 'FOLLOW_UP', 'ORDER', 'PIC_ABSENT'];
+    const outcomes = ['ORDER', 'ORDER', 'ORDER', 'ORDER', 'ORDER', 'ORDER', 'COLLECTION', 'FOLLOW_UP'];
     const logs = [];
     const dayStart = new Date();
     dayStart.setHours(0, 1, 0, 0);
@@ -866,10 +866,32 @@ window.ArbaData = (function() {
     return logs;
   })();
 
-  // Baseline historis jumlah outlet di luar 11 outlet sampel (hasil migrasi awal)
+  const productionForecasts = [
+    { rank: 1, sku: 'SKU-ARB-MDR500', name: "Madu Randu Murni Arba'in 500g", division: 'Madu & Herbal', monthlySoldUnits: 3840, forecastNextMonthUnits: 4200, productionRecommendation: '2,0 ton / bulan', monthlyConsumptionNote: '2,0 ton / bln (4.000 botol)' },
+    { rank: 2, sku: 'SKU-ARB-MDRB500', name: 'Madu Rambutan 500g', division: 'Madu & Herbal', monthlySoldUnits: 920, forecastNextMonthUnits: 1000, productionRecommendation: '1,0 ton / bulan', monthlyConsumptionNote: '1,0 ton / bln (2.000 botol)' },
+    { rank: 3, sku: 'SKU-ARB-HBT100', name: 'Habbatussauda Oil Softgel 100s', division: 'Madu & Herbal', monthlySoldUnits: 1260, forecastNextMonthUnits: 1400, productionRecommendation: '1.400 botol / bulan', monthlyConsumptionNote: '1,2 ton / bln (1.260 botol)' },
+    { rank: 4, sku: 'SKU-ARB-SBZ250', name: 'Sabun Herbal Zaitun 250ml', division: 'Kosmetik & Perawatan', monthlySoldUnits: 1040, forecastNextMonthUnits: 1220, productionRecommendation: '1.220 botol / bulan', monthlyConsumptionNote: '1,0 ton / bln (1.040 botol)' }
+  ];
+
+  const outletConsignments = [
+    { outletCode: 'AP-SLO-001', sku: 'SKU-ARB-HBT100', name: 'Habbatussauda Oil Softgel 100s', batch: 'BATCH-2026-018', expiry: '12 Mei 2026', consignedQty: 30, soldQty: 22, remainingQty: 8, unitPrice: 65000, velocity: 'LARIS', daysInOutlet: 12, nearExpiry: true },
+    { outletCode: 'AP-SLO-001', sku: 'SKU-ARB-MDR500', name: "Madu Randu Murni Arba'in 500g", batch: 'BATCH-2026-021', expiry: '18 Okt 2027', consignedQty: 60, soldQty: 49, remainingQty: 11, unitPrice: 85000, velocity: 'LARIS', daysInOutlet: 16, nearExpiry: false },
+    { outletCode: 'AP-SLO-002', sku: 'SKU-ARB-HBT100', name: 'Habbatussauda Oil Softgel 100s', batch: 'BATCH-2026-017', expiry: '26 Mei 2026', consignedQty: 24, soldQty: 8, remainingQty: 16, unitPrice: 65000, velocity: 'LAMA_TIDAK_LAKU', daysInOutlet: 67, nearExpiry: true },
+    { outletCode: 'AP-SLO-002', sku: 'SKU-ARB-EVO250', name: 'Minyak Zaitun Extra Virgin 250ml', batch: 'BATCH-2026-006', expiry: '14 Jun 2026', consignedQty: 18, soldQty: 3, remainingQty: 15, unitPrice: 79000, velocity: 'LAMA_TIDAK_LAKU', daysInOutlet: 74, nearExpiry: true }
+  ];
+
+  const salesWarehouseLoading = [
+    { id: 'LOAD-2026-041', salesRep: 'Budi Santoso', division: 'Madu & Herbal', routeArea: 'Solo Tengah · Target 15 outlet', status: 'SEDANG_KELILING', cashCollected: 4850000, items: [{ sku: 'SKU-ARB-MDR500', name: "Madu Randu Murni Arba'in 500g", batch: 'BATCH-2026-018', loadedQty: 60, droppedQty: 42, returnedQty: 0, remainingOnVehicle: 18, discrepancy: 0 }] },
+    { id: 'LOAD-2026-042', salesRep: 'Anita Rahmawati', division: 'Kosmetik & Perawatan', routeArea: 'Jebres · Target 15 outlet', status: 'TERVERIFIKASI_KLOP', cashCollected: 2340000, items: [{ sku: 'SKU-ARB-SBZ250', name: 'Sabun Herbal Zaitun 250ml', batch: 'BATCH-2026-024', loadedQty: 50, droppedQty: 38, returnedQty: 12, remainingOnVehicle: 0, discrepancy: 0 }] },
+    { id: 'LOAD-2026-043', salesRep: 'Agus Hermawan', division: 'Madu & Herbal', routeArea: 'Karanganyar Kota · Target 15 outlet', status: 'SELISIH_AUDIT', cashCollected: 1750000, auditNote: 'Bawa 15 dari gudang, masuk kantor 12, selisih 3 unit belum kembali.', items: [{ sku: 'SKU-ARB-MDH500', name: 'Madu Hutan 500g', batch: 'BATCH-2026-025', loadedQty: 15, droppedQty: 12, returnedQty: 0, remainingOnVehicle: 0, discrepancy: 3 }] }
+  ];
+
+  // Baseline aggregates sit above the six detailed sample outlet records.
   const baseline = {
-    extraApotek: 92 - outlets.filter(function (o) { return o.type !== 'Minimarket'; }).length,
-    extraMinimarket: 56 - outlets.filter(function (o) { return o.type === 'Minimarket'; }).length
+    extraApotek: 684 - outlets.filter(function (o) { return o.type !== 'Minimarket'; }).length,
+    extraMinimarket: 340 - outlets.filter(function (o) { return o.type === 'Minimarket'; }).length,
+    alarmOrange: 4,
+    alarmPink: 18
   };
 
   return {
@@ -882,6 +904,9 @@ window.ArbaData = (function() {
     driverManifests,
     salesTeam,
     visitLogs,
+    productionForecasts,
+    outletConsignments,
+    salesWarehouseLoading,
     baseline
   };
 })();

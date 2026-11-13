@@ -31,6 +31,18 @@
     var products = appState.products;
     var ledger = appState.ledger;
     var supplierPOs = appState.supplierPOs;
+    var salesLoadRecords = ((window.ArbaData && window.ArbaData.salesWarehouseLoading) || []).map(function (record) {
+      var items = record.items || [];
+      function total(field) { return items.reduce(function (sum, item) { return sum + Number(item[field] || 0); }, 0); }
+      return Object.assign({}, record, {
+        rep: record.salesRep || record.rep,
+        loadedQty: total('loadedQty'),
+        droppedQty: total('droppedQty'),
+        returnedQty: total('returnedQty'),
+        remainingOnVehicle: total('remainingOnVehicle'),
+        discrepancy: total('discrepancy')
+      });
+    });
 
     // Compute metrics
     var totalPhysicalUnits = products.reduce(function (acc, p) { return acc + p.stock; }, 0);
@@ -95,6 +107,16 @@
               >
                 <span class="material-symbols-outlined text-[16px]">add_box</span>
                 <span>+ Penerimaan Batch</span>
+              </button>
+
+              <button
+                id="btn-register-sales-load"
+                class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold whitespace-nowrap transition-colors border border-amber-200 cursor-pointer"
+                type="button"
+                title="Catat picking gudang dan barang yang dibawa sales"
+              >
+                <span class="material-symbols-outlined text-[16px]">local_shipping</span>
+                <span>Catat Sales Ambil Barang</span>
               </button>
 
               <button
@@ -371,6 +393,55 @@
             </div>
           </div>
         </div>
+
+        <section class="loading-reconciliation" aria-labelledby="loading-reconciliation-title">
+          <div class="loading-section-heading">
+            <div>
+              <p class="eyebrow">KONTROL ARMADA · SALES &amp; GUDANG</p>
+              <h2 id="loading-reconciliation-title">Rekonsiliasi Barang Bawaan Sales</h2>
+              <p>Bandingkan picking gudang, barang turun, retur, sisa di kendaraan, dan penerimaan kas.</p>
+            </div>
+            <div class="loading-section-summary">
+              <span class="loading-summary-label">Selisih terbuka</span>
+              <strong>${salesLoadRecords.reduce(function (sum, record) { return sum + Math.max(0, record.loadedQty - record.droppedQty - record.returnedQty - record.remainingOnVehicle); }, 0)} <small>unit</small></strong>
+              <span>${salesLoadRecords.filter(function (record) { return Math.max(0, record.loadedQty - record.droppedQty - record.returnedQty - record.remainingOnVehicle) > 0; }).length} rute perlu audit</span>
+            </div>
+          </div>
+          <div class="loading-cards">
+            ${salesLoadRecords.map(function (record) {
+              var difference = Math.max(0, record.loadedQty - record.droppedQty - record.returnedQty - record.remainingOnVehicle);
+              var isInRoute = record.status === 'SEDANG_KELILING';
+              var statusLabel = isInRoute ? 'Sedang di rute' : difference > 0 ? (record.auditReviewed ? 'Audit dicatat' : 'Perlu rekonsiliasi') : 'Klop';
+              var statusClass = isInRoute ? 'loading-status--route' : difference > 0 ? 'loading-status--alert' : 'loading-status--matched';
+              return `
+                <article class="loading-card ${difference > 0 ? 'loading-card--alert' : ''}">
+                  <div class="loading-card-heading">
+                    <div class="loading-avatar" aria-hidden="true">${record.rep.split(' ').map(function (part) { return part[0]; }).slice(0, 2).join('')}</div>
+                    <div class="loading-rep">
+                      <h3>${record.rep}</h3>
+                      <span>${record.division} · ${record.routeArea}</span>
+                    </div>
+                    <span class="loading-status ${statusClass}">${statusLabel}</span>
+                  </div>
+                  <div class="loading-card-stats">
+                    <div><span>Picking</span><strong>${record.loadedQty}<small> unit</small></strong></div>
+                    <div><span>Turun</span><strong>${record.droppedQty}<small> unit</small></strong></div>
+                    <div><span>Retur</span><strong>${record.returnedQty}<small> unit</small></strong></div>
+                    <div><span>Di kendaraan</span><strong>${record.remainingOnVehicle}<small> unit</small></strong></div>
+                  </div>
+                  <div class="loading-card-footer">
+                    <div><span>Kas diterima</span><strong>${window.ArbaUtils.formatRupiah(record.cashCollected)}</strong></div>
+                    <div class="loading-difference ${difference ? 'loading-difference--alert' : ''}">
+                      <span>${difference ? 'Belum terjelaskan' : 'Selisih'}</span><strong>${difference} unit</strong>
+                    </div>
+                  </div>
+                  ${difference > 0 ? `<button class="btn-audit-sales-load" data-load-id="${record.id}" type="button">Tinjau &amp; klopkan selisih <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>` : `<p class="loading-audit-note"><span class="material-symbols-outlined" aria-hidden="true">verified</span> Rekap picking, faktur, dan retur seimbang.</p>`}
+                </article>
+              `;
+            }).join('')}
+          </div>
+          <p class="loading-demo-note">Data rute saat ini adalah contoh operasional lokal; pencatatan tidak mengubah stock ledger.</p>
+        </section>
 
         <!-- SECTION 1: Warehouse Stock Catalog & ROP Monitor -->
         <section class="flex flex-col gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-xs border border-border-subtle/40">
@@ -734,6 +805,21 @@
   }
 
   function bindEvents(container) {
+    var btnRegisterLoad = container.querySelector('#btn-register-sales-load');
+    if (btnRegisterLoad) {
+      btnRegisterLoad.addEventListener('click', function () {
+        openSalesLoadModal(container);
+      });
+    }
+
+    container.querySelectorAll('.btn-audit-sales-load').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var records = (window.ArbaData && window.ArbaData.salesWarehouseLoading) || [];
+        var record = records.find(function (item) { return item.id === button.getAttribute('data-load-id'); });
+        if (record) openSalesLoadAuditModal(record, container);
+      });
+    });
+
     // Inbound Batch Button
     var btnInbound = container.querySelector('#btn-inbound-batch');
     if (btnInbound) {
@@ -837,6 +923,144 @@
         renderInventoryLedger(container);
       });
     });
+  }
+
+  function openSalesLoadModal(container) {
+    var appState = window.ArbaStore.getState();
+    var salesTeam = appState.salesTeam || [];
+    var products = appState.products || [];
+    var modalHtml = `
+      <div class="modal-dialog max-w-xl">
+        <div class="modal-header">
+          <div><p class="eyebrow">OPERASIONAL GUDANG</p><h2 id="sales-load-modal-title">Catat sales ambil barang</h2></div>
+          <button class="icon-btn" type="button" aria-label="Tutup" onclick="window.ArbaApp.closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+        </div>
+        <form id="sales-load-form" aria-labelledby="sales-load-modal-title">
+          <div class="modal-body sales-load-form">
+            <p class="form-help">Cocokkan jumlah picking gudang dengan faktur sebelum sales berangkat. Entri ini merupakan simulasi sesi lokal.</p>
+            <label for="sales-load-rep">Sales rep
+              <select id="sales-load-rep" required>${salesTeam.map(function (rep) { return `<option value="${window.ArbaUtils.escapeHtml(rep.name)}">${window.ArbaUtils.escapeHtml(rep.name)} · ${window.ArbaUtils.escapeHtml(rep.division || 'Madu & Herbal')}</option>`; }).join('')}</select>
+            </label>
+            <label for="sales-load-route">Rute / rayon
+              <input id="sales-load-route" type="text" required value="Solo Raya · Target 15 outlet" />
+            </label>
+            <label for="sales-load-sku">Produk / SKU
+              <select id="sales-load-sku" required>${products.map(function (product) { return `<option value="${product.sku}">${window.ArbaUtils.escapeHtml(product.name)} · ${product.sku}</option>`; }).join('')}</select>
+            </label>
+            <div class="sales-load-form-grid">
+              <label for="sales-load-picked">Picking gudang (unit)<input id="sales-load-picked" type="number" min="1" value="30" required /></label>
+              <label for="sales-load-invoice">Jumlah faktur (unit)<input id="sales-load-invoice" type="number" min="0" value="30" required /></label>
+              <label for="sales-load-cash">Setoran awal (Rp)<input id="sales-load-cash" type="number" min="0" value="0" required /></label>
+            </div>
+            <div id="sales-load-validation" class="sales-load-validation" role="status" aria-live="polite"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-outline" type="button" onclick="window.ArbaApp.closeModal()">Batal</button>
+            <button class="btn-primary" type="submit"><span class="material-symbols-outlined" aria-hidden="true">local_shipping</span> Catat keberangkatan</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    window.ArbaApp.openModal(modalHtml);
+    setTimeout(function () {
+      var form = document.getElementById('sales-load-form');
+      if (!form) return;
+      var pickedInput = document.getElementById('sales-load-picked');
+      var invoiceInput = document.getElementById('sales-load-invoice');
+      var validation = document.getElementById('sales-load-validation');
+      function updateValidation() {
+        var picked = Number(pickedInput.value || 0);
+        var invoice = Number(invoiceInput.value || 0);
+        var difference = picked - invoice;
+        validation.textContent = difference === 0 ? 'Picking dan faktur cocok.' : 'Periksa selisih ' + Math.abs(difference) + ' unit sebelum sales berangkat.';
+        validation.className = 'sales-load-validation ' + (difference === 0 ? 'sales-load-validation--ok' : 'sales-load-validation--alert');
+      }
+      pickedInput.addEventListener('input', updateValidation);
+      invoiceInput.addEventListener('input', updateValidation);
+      updateValidation();
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var picked = Number(pickedInput.value);
+        var invoice = Number(invoiceInput.value);
+        var product = products.find(function (item) { return item.sku === document.getElementById('sales-load-sku').value; });
+        var rep = salesTeam.find(function (item) { return item.name === document.getElementById('sales-load-rep').value; });
+        if (!product || !rep || !Number.isInteger(picked) || !Number.isInteger(invoice) || picked < 1 || invoice < 0 || picked > product.stock || picked !== invoice) {
+          validation.textContent = 'Jumlah picking harus sama dengan faktur dan tidak boleh melebihi stok gudang.';
+          validation.className = 'sales-load-validation sales-load-validation--alert';
+          return;
+        }
+        var discrepancy = Math.abs(picked - invoice);
+        var item = {
+          sku: product.sku,
+          name: product.name,
+          batch: product.activeBatch,
+          loadedQty: picked,
+          droppedQty: 0,
+          returnedQty: 0,
+          remainingOnVehicle: Math.min(picked, invoice),
+          discrepancy: discrepancy
+        };
+        window.ArbaData.salesWarehouseLoading.unshift({
+          id: 'LOAD-' + new Date().getFullYear() + '-' + Math.floor(100 + Math.random() * 900),
+          salesRep: rep.name,
+          division: rep.division || 'Madu & Herbal',
+          routeArea: document.getElementById('sales-load-route').value,
+          status: discrepancy ? 'SELISIH_AUDIT' : 'SEDANG_KELILING',
+          auditNote: discrepancy ? 'Picking gudang berbeda dari total faktur.' : '',
+          cashCollected: Number(document.getElementById('sales-load-cash').value || 0),
+          items: [item]
+        });
+        window.ArbaApp.closeModal();
+        window.ArbaApp.showToast('Catatan picking sales tersimpan di sesi demo.', 'local_shipping');
+        renderInventoryLedger(container);
+      });
+    }, 0);
+  }
+
+  function openSalesLoadAuditModal(record, container) {
+    var item = (record.items || [])[0];
+    if (!item) return;
+    var difference = Math.max(0, item.loadedQty - item.droppedQty - item.returnedQty - item.remainingOnVehicle);
+    var modalHtml = `
+      <div class="modal-dialog max-w-md">
+        <div class="modal-header"><div><p class="eyebrow">AUDIT SELISIH · ${record.id}</p><h2 id="sales-audit-title">Tinjau barang bawaan</h2></div><button class="icon-btn" type="button" aria-label="Tutup" onclick="window.ArbaApp.closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div>
+        <form id="sales-audit-form" aria-labelledby="sales-audit-title">
+          <div class="modal-body sales-load-form">
+            <div class="sales-audit-summary"><strong>${record.salesRep}</strong><span>${item.name} · ${item.batch}</span><span>Picking ${item.loadedQty} − turun ${item.droppedQty} − retur ${item.returnedQty} − kendaraan ${item.remainingOnVehicle} = <b>${difference} unit</b></span></div>
+            <label for="sales-audit-found">Unit yang ditemukan dan dikembalikan ke gudang
+              <input id="sales-audit-found" type="number" min="0" max="${difference}" value="${difference}" required />
+            </label>
+            <label for="sales-audit-note">Catatan audit
+              <textarea id="sales-audit-note" rows="3" placeholder="Contoh: diterima kembali, rusak, atau belum terverifikasi"></textarea>
+            </label>
+            <p class="form-help">Selisih hanya ditutup berdasarkan hasil hitung fisik. Nilai sisa akan tetap terbuka untuk tindak lanjut.</p>
+          </div>
+          <div class="modal-footer"><button class="btn-outline" type="button" onclick="window.ArbaApp.closeModal()">Batal</button><button class="btn-primary" type="submit">Catat hasil audit</button></div>
+        </form>
+      </div>
+    `;
+    window.ArbaApp.openModal(modalHtml);
+    setTimeout(function () {
+      var form = document.getElementById('sales-audit-form');
+      if (!form) return;
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var returned = Number(document.getElementById('sales-audit-found').value || 0);
+        if (!Number.isInteger(returned) || returned < 0 || returned > difference) {
+          window.ArbaApp.showToast('Jumlah retur harus berada dalam rentang selisih yang tercatat.', 'warning');
+          return;
+        }
+        item.returnedQty += returned;
+        item.discrepancy = Math.max(0, item.loadedQty - item.droppedQty - item.returnedQty - item.remainingOnVehicle);
+        record.auditReviewed = true;
+        record.auditNote = document.getElementById('sales-audit-note').value.trim() || record.auditNote;
+        if (item.discrepancy === 0) record.status = 'TERVERIFIKASI_KLOP';
+        window.ArbaApp.closeModal();
+        window.ArbaApp.showToast(item.discrepancy ? 'Hasil audit dicatat; ' + item.discrepancy + ' unit masih perlu ditindaklanjuti.' : 'Rekonsiliasi selesai dan selisih sudah klop.', item.discrepancy ? 'warning' : 'verified');
+        renderInventoryLedger(container);
+      });
+    }, 0);
   }
 
   // Modal 0: Migrasi / Impor Master Produk & Saldo Stok Awal (CSV)
